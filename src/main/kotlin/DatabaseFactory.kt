@@ -1,4 +1,5 @@
 package com.epam.dsm
+
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jetbrains.exposed.sql.Database
@@ -6,6 +7,10 @@ import org.jetbrains.exposed.sql.Database
 object DatabaseFactory {
     fun init() {
         Database.connect(hikari())
+    }
+
+    fun init(hikariDataSource:HikariDataSource) {
+        Database.connect(hikariDataSource)
     }
 
     private fun hikari(): HikariDataSource {

@@ -30,7 +30,6 @@ import java.sql.ResultSet
 
 class StoreClient(val schema: String) {
     init {
-        DatabaseFactory.init()
         transaction {
             execWrapper("CREATE SCHEMA IF NOT EXISTS $schema")
         }

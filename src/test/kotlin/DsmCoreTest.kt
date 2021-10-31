@@ -19,13 +19,10 @@ package com.epam.dsm
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.junit.Test
 import kotlin.test.*
 
-class DsmCoreTest {
+class DsmCoreTest : PostgresBased() {
 
     private val last = Last(2.toByte())
     private val blink = SubObject("subStr", 12, last)

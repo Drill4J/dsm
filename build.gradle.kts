@@ -29,7 +29,9 @@ dependencies {
     implementation(kotlin("reflect"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
-    testImplementation(kotlin("test-junit"))
+    testImplementation(kotlin("test-junit5"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
+
 }
 
 dependencies {
@@ -42,6 +44,7 @@ dependencies {
     implementation("org.testng:testng:7.1.0")
     implementation("com.zaxxer:HikariCP:$hikariVersion")
     implementation("org.postgresql:postgresql:$postgresSqlVersion")
+    testImplementation("ru.yandex.qatools.embed:postgresql-embedded:2.10")
 }
 
 java.targetCompatibility = JavaVersion.VERSION_1_8
@@ -85,3 +88,7 @@ license {
 }
 
 tasks["licenseFormat"].dependsOn(licenseFormatSettings)
+
+tasks.test {
+    useJUnitPlatform()
+}

@@ -9,7 +9,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 
-class BitSetTest {
+class BitSetTest : PostgresBased(){
 
     private val schema = "bittest"
     private val agentStore = StoreClient(schema)
