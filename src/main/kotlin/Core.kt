@@ -1,0 +1,170 @@
+/**
+ * Copyright 2020 EPAM Systems
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+@file:Suppress("CovariantEquals")
+
+package com.epam.dsm
+
+import com.epam.dsm.util.createJsonTable
+import com.epam.dsm.util.execWrapper
+import com.epam.dsm.util.toTableName
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.serializer
+import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.sql.ResultSet
+
+class StoreClient(val schema: String) {
+    init {
+        DatabaseFactory.init()
+        transaction {
+            execWrapper("CREATE SCHEMA IF NOT EXISTS $schema")
+        }
+    }
+
+    suspend fun <T> executeInAsyncTransaction(block: suspend Transaction.() -> T) = withContext(Dispatchers.IO) {
+        newSuspendedTransaction {
+            block(this)
+        }
+    }
+
+    suspend inline fun <reified T : Any> store(any: T) = run {
+        executeInAsyncTransaction {
+            store(any, schema)
+        }
+        any
+    }
+
+    suspend inline fun <reified T : Any> getAll(): Collection<T> =
+        executeInAsyncTransaction {
+            val finalData = mutableListOf<T>()
+            try {
+                val simpleName = T::class.toTableName()
+
+                execWrapper("select JSON_BODY FROM $schema.$simpleName") { rs ->
+                    while (rs.next()) {
+                        val jsonBody = rs.getString(1)
+                        finalData.add(
+                            json.decodeFromString(
+                                T::class.serializer(),
+                                jsonBody
+                            )
+                        )
+                    }
+                }
+
+
+            } catch (ex: Exception) {
+                //todo?
+            }
+            finalData
+        }
+
+    suspend inline fun <reified T : Any> findById(id: Any): T? =
+        withContext(Dispatchers.IO) {
+            executeInAsyncTransaction {
+                var rs: T? = null
+                val simpleName = T::class.toTableName()
+                execWrapper("select JSON_BODY FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") {
+                    if (it.next()) {
+                        rs = json.decodeFromString(
+                            T::class.serializer(),
+                            it.getString(1)
+                        )
+                        return@execWrapper
+                    }
+                }
+                rs
+            }
+        }
+
+
+    suspend inline fun <reified T : Any> findBy(noinline expression: Expr<T>.() -> Unit) =
+        withContext<Collection<T>>(Dispatchers.IO) {
+            executeInAsyncTransaction {
+
+                val simpleName = T::class.toTableName()
+                val finalData = mutableListOf<T>()
+                val transform: (ResultSet) -> Unit = { rs ->
+                    while (rs.next()) {
+                        val jsonBody = rs.getString(1)
+                        finalData.add(
+                            json.decodeFromString(
+                                T::class.serializer(),
+                                jsonBody
+                            )
+                        )
+                    }
+                }
+                val sqlStatement = """
+                                   |select JSON_BODY FROM $schema.$simpleName
+                                   |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
+                               """.trimMargin()
+                execWrapper(sqlStatement, transform)
+                finalData
+            }
+        }
+
+    suspend inline fun <reified T : Any> deleteById(id: Any): Unit =
+        withContext(Dispatchers.IO) {
+            executeInAsyncTransaction {
+                val simpleName = T::class.toTableName()
+                execWrapper("DELETE FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
+            }
+        }
+
+
+    suspend inline fun <reified T : Any> deleteBy(noinline expression: Expr<T>.() -> Unit) =
+        withContext(Dispatchers.IO) {
+            executeInAsyncTransaction {
+                val simpleName = T::class.toTableName()
+                execWrapper(
+                    """
+                    |DELETE FROM $schema.$simpleName
+                    |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
+                    """.trimMargin()
+                )
+            }
+        }
+
+
+    suspend inline fun <reified T : Any> deleteAll(): Unit =
+        withContext(Dispatchers.IO) {
+            executeInAsyncTransaction {
+                val simpleName = T::class.toTableName()
+                execWrapper("DELETE FROM $schema.$simpleName")
+            }
+
+        }
+}
+
+inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
+    val (_, idValue) = idPair(any)
+    val simpleName = T::class.toTableName()
+    createJsonTable(schema, simpleName)
+
+    val json = json.encodeToString(T::class.serializer(), any)
+    val stmt =
+        """
+            |INSERT INTO $schema.${simpleName.toLowerCase()} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', '$json')
+            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+        """.trimMargin()
+    execWrapper(stmt)
+}
+
+
+
