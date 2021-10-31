@@ -1,10 +1,9 @@
 package com.epam.dsm
 
-import com.epam.dsm.util.stringRepresentation
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
-import serializer.BitSetSerializer
+import com.epam.dsm.serializer.BitSetSerializer
 import java.util.*
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest

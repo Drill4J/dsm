@@ -1,4 +1,4 @@
-package serializer
+package com.epam.dsm.serializer
 
 import com.epam.dsm.util.stringRepresentation
 import com.epam.dsm.util.toBitSet
