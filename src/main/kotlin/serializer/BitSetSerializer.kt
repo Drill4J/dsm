@@ -26,3 +26,22 @@ object BitSetSerializer : KSerializer<BitSet> {
     override val descriptor: SerialDescriptor
         get() = buildClassSerialDescriptor("BitSet")
 }
+
+
+object BinarySerializer : KSerializer<ByteArray> {
+
+    override fun serialize(encoder: Encoder, value: ByteArray) {
+        //store to new TABLE as BLOB
+        //generate ID
+        //serialize ID
+    }
+
+    override fun deserialize(decoder: Decoder): ByteArray {
+        //read ID
+        //read byteArray from blob by ID
+        TODO()
+    }
+
+    override val descriptor: SerialDescriptor
+        get() = buildClassSerialDescriptor("Binary")
+}
