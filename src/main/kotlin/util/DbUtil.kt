@@ -21,7 +21,7 @@ fun Transaction.createBitwiseTable(schema: String) {
     execWrapper("CREATE TABLE IF NOT EXISTS $schema.BITSET (ID varchar(256) not null constraint bitset_pk primary key, bitset BIT VARYING(10000000)); ")
 }
 
-fun Transaction.putBitset(schema: String,id:String,  value: String) {
+fun Transaction.putBitset(schema: String, id: String, value: String) {
     execWrapper("INSERT INTO $schema.BITSET VALUES ('$id', B'$value');")
 }
 

@@ -2,12 +2,31 @@ package com.epam.dsm
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
+import org.testng.annotations.AfterTest
+import org.testng.annotations.BeforeTest
 import ru.yandex.qatools.embed.postgresql.EmbeddedPostgres
 import ru.yandex.qatools.embed.postgresql.distribution.Version
 
-abstract class PostgresBased {
+abstract class PostgresBased(private val schema: String) {
+    val agentStore = StoreClient(schema)
+
+    @AfterTest
+    fun after() {
+        transaction {
+            exec("DROP SCHEMA $schema CASCADE")
+        }
+    }
+
+    @BeforeTest
+    fun before() {
+        transaction {
+            exec("CREATE SCHEMA IF NOT EXISTS $schema")
+        }
+    }
+
     companion object {
         lateinit var postgres: EmbeddedPostgres
 

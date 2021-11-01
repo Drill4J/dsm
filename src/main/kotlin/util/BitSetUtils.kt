@@ -17,5 +17,12 @@ fun BitSet.stringRepresentation(): String {
 }
 
 fun String.toBitSet(): BitSet {
-    return BitSet()
+    val bitSet = BitSet(length + 1)
+    bitSet.set(length)//magic
+    forEachIndexed { inx, ch ->
+        if (ch == '1') {
+            bitSet.set(inx)
+        }
+    }
+    return bitSet
 }

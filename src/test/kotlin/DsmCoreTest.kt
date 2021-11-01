@@ -19,32 +19,14 @@ package com.epam.dsm
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.test.*
 
-class DsmCoreTest : PostgresBased() {
+class DsmCoreTest : PostgresBased("plugin") {
 
     private val last = Last(2.toByte())
     private val blink = SubObject("subStr", 12, last)
     private val complexObject = ComplexObject("str", 'x', blink, EnumExample.SECOND, null)
     private val simpleObject = SimpleObject("id", "subStr", 12, last)
-
-    private val schema = "plugin"
-    private val agentStore = StoreClient(schema)
-
-    @AfterTest
-    fun after() {
-        transaction {
-            exec("DROP SCHEMA $schema CASCADE")
-        }
-    }
-
-    @BeforeTest
-    fun before() {
-        transaction {
-            exec("CREATE SCHEMA IF NOT EXISTS $schema")
-        }
-    }
 
     @Test
     fun `should store and retrieve an object with composite id`() = runBlocking {

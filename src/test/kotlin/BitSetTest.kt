@@ -1,32 +1,13 @@
 package com.epam.dsm
 
+import com.epam.dsm.serializer.BitSetSerializer
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.transactions.transaction
-import com.epam.dsm.serializer.BitSetSerializer
 import java.util.*
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
-class BitSetTest : PostgresBased(){
-
-    private val schema = "bittest"
-    private val agentStore = StoreClient(schema)
-
-    @AfterTest
-    fun after() {
-        transaction {
-            exec("DROP SCHEMA $schema CASCADE")
-        }
-    }
-
-    @BeforeTest
-    fun before() {
-        transaction {
-            exec("CREATE SCHEMA IF NOT EXISTS $schema")
-        }
-    }
+class BitSetTest : PostgresBased("bitset") {
 
     @Serializable
     data class BitsetClass(
@@ -36,24 +17,28 @@ class BitSetTest : PostgresBased(){
         val btst: BitSet
     )
 
-
     @Test
     fun shouldStoreBitSetInSeparateTable() = runBlocking<Unit> {
-
         val size = 10
+        val btst = BitSet(size)
+            .apply {
+                set(8)
+                set(6)
+                set(4)
+                set(2)
+                set(0)
+            }
         agentStore.store(
             BitsetClass(
                 "someIDhere",
-                BitSet(size + 1)
-                    .apply { set(10) } //bitsetMagic
-                    .apply {
-                        set(8)
-                        set(6)
-                        set(4)
-                        set(2)
-                        set(0)
-                    }
+                btst
             )
         )
+        assertEquals(btst, agentStore.getAll<BitsetClass>().first().btst)
     }
+}
+
+fun BitSet(nbits: Int): BitSet {
+    return java.util.BitSet(nbits + 1)
+        .apply { set(10) } //bitsetMagic
 }
