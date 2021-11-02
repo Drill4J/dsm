@@ -16,8 +16,11 @@
 package com.epam.dsm
 
 import com.epam.dsm.serializer.BitSetSerializer
+import com.epam.dsm.util.execWrapper
+import com.epam.dsm.util.toBitSet
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,6 +55,43 @@ class BitSetTest : PostgresBased("bitset") {
         )
         assertEquals(btst, agentStore.findById<BitsetClass>(id)?.btst)
     }
+
+    @Test //todo split it to separate tests
+    fun bitwiseOperations() = runBlocking {
+        val size = 100
+        (0..size).forEach { i ->
+            val id = "someIDhere$i"
+            agentStore.store(
+                BitsetClass(
+                    id,
+                    BitSet(size)
+                        .apply {
+                            set(i)
+                        }
+                )
+            )
+        }
+
+        val filledBitSet = BitSet(size).apply {
+            (0..size).forEach {
+                set(it)
+            }
+        }
+        assertEquals(filledBitSet, bitwise("bit_or"))
+
+        val emptyBitSet = BitSet(size)
+        assertEquals(emptyBitSet, bitwise("bit_and"))
+    }
+}
+
+
+fun bitwise(name: String) = transaction {
+    lateinit var final: BitSet
+    execWrapper("select ${name}(Cast(JSON_BODY->>'btst' as BIT VARYING(10000000))) FROM bitset.bitset_class") {
+        if (it.next())
+            final = it.getString(1).toBitSet()
+    }
+    final
 }
 
 fun BitSet(nbits: Int): BitSet {
