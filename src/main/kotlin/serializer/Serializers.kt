@@ -201,64 +201,57 @@
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
  */
-package com.epam.dsm.util
+package com.epam.dsm.serializer
 
-import mu.KotlinLogging
-import org.jetbrains.exposed.sql.IColumnType
-import org.jetbrains.exposed.sql.Transaction
-import java.io.InputStream
-import java.sql.ResultSet
-import kotlin.reflect.KClass
+import com.epam.dsm.util.*
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.util.*
 
-val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
-val logger = KotlinLogging.logger {}
+//search select bit_or(Cast(JSON_BODY->>'bitset' as BIT VARYING(10000000))) FROM bittest.bitset_class
+object BitSetSerializer : KSerializer<BitSet> {
 
-val dbContext = InheritableThreadLocal<String>()
+    override fun serialize(encoder: Encoder, value: BitSet) {
+        encoder.encodeSerializableValue(String.serializer(), value.stringRepresentation())
+    }
 
-fun KClass<*>.toTableName(): String {
-    return camelRegex.replace(this.simpleName!!) {
-        "_${it.value}"
-    }.toLowerCase()
+    override fun deserialize(decoder: Decoder): BitSet {
+        val decodeSerializableValue = decoder.decodeSerializableValue(String.serializer())
+        return decodeSerializableValue.toBitSet()
+    }
+
+    override val descriptor: SerialDescriptor
+        get() = buildClassSerialDescriptor("BitSet")
 }
 
-fun Transaction.createJsonTable(schema: String, simpleName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb); ")
-}
 
-fun Transaction.createBinaryTable(schema: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea); ")
-}
+object BinarySerializer : KSerializer<ByteArray> {
 
-fun Transaction.putBinary(schema: String, id: String, value: ByteArray) {
-    val prepareStatement = connection.prepareStatement("INSERT INTO $schema.BINARYA VALUES ('$id', ?)", false)
-    prepareStatement[1] = value
-    prepareStatement.executeUpdate()
-}
+    override fun serialize(encoder: Encoder, value: ByteArray) {
+        val schema = dbContext.get() ?: "global"
+        transaction {
+            createBinaryTable(schema)
+        }
+        val id = UUID.randomUUID().toString()
+        transaction {
+            putBinary(schema, id, value)
+//            putBinary(schema, id, value.inputStream())
+        }
+        encoder.encodeSerializableValue(String.serializer(), id)
+    }
 
-fun Transaction.getBinary(schema: String, id: String): ByteArray {
-    val prepareStatement = connection.prepareStatement(
-        "SELECT BINARYA FROM $schema.BINARYA " +
-                "WHERE id = '$id'", false
-    )
-    val executeQuery = prepareStatement.executeQuery()
-    return if (executeQuery.next())
-        executeQuery.getBytes(1)
-    else byteArrayOf() //todo or throw error?
+    override fun deserialize(decoder: Decoder): ByteArray {
+        val id = decoder.decodeSerializableValue(String.serializer())
+        val schema = dbContext.get() ?: "global"
+        return transaction { getBinary(schema, id) }
+    }
 
-}
-
-fun Transaction.putBinary(schema: String, id: String, value: InputStream) {
-    val prepareStatement = connection.prepareStatement("INSERT INTO $schema.BINARYA VALUES ('$id', ?)", false)
-    prepareStatement.setInputStream(1, value)
-    prepareStatement.executeUpdate()
-}
-
-fun Transaction.execWrapper(
-    sqlStatement: String,
-    args: Iterable<Pair<IColumnType, Any?>> = emptyList(),
-    transform: (ResultSet) -> Unit = {}
-) {
-    logger.trace { "SQL statement: $sqlStatement" }
-    exec(sqlStatement, args, transform = transform)
+    override val descriptor: SerialDescriptor
+        get() = buildClassSerialDescriptor("Binary")
 }

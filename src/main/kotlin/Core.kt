@@ -17,9 +17,7 @@
 
 package com.epam.dsm
 
-import com.epam.dsm.util.createJsonTable
-import com.epam.dsm.util.execWrapper
-import com.epam.dsm.util.toTableName
+import com.epam.dsm.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.serializer
@@ -27,6 +25,7 @@ import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.sql.ResultSet
+import kotlin.time.measureTime
 
 class StoreClient(val schema: String) {
     init {
@@ -52,6 +51,7 @@ class StoreClient(val schema: String) {
         executeInAsyncTransaction {
             val finalData = mutableListOf<T>()
             try {
+                dbContext.set(schema)
                 val simpleName = T::class.toTableName()
 
                 execWrapper("select JSON_BODY FROM $schema.$simpleName") { rs ->
@@ -69,6 +69,8 @@ class StoreClient(val schema: String) {
 
             } catch (ex: Exception) {
                 //todo?
+            } finally {
+                dbContext.remove()
             }
             finalData
         }
@@ -76,18 +78,23 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> findById(id: Any): T? =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                var rs: T? = null
-                val simpleName = T::class.toTableName()
-                execWrapper("select JSON_BODY FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") {
-                    if (it.next()) {
-                        rs = json.decodeFromString(
-                            T::class.serializer(),
-                            it.getString(1)
-                        )
-                        return@execWrapper
+                try {
+                    dbContext.set(schema)
+                    var rs: T? = null
+                    val simpleName = T::class.toTableName()
+                    execWrapper("select JSON_BODY FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") {
+                        if (it.next()) {
+                            rs = json.decodeFromString(
+                                T::class.serializer(),
+                                it.getString(1)
+                            )
+                            return@execWrapper
+                        }
                     }
+                    rs
+                } finally {
+                    dbContext.remove()
                 }
-                rs
             }
         }
 
@@ -95,26 +102,30 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> findBy(noinline expression: Expr<T>.() -> Unit) =
         withContext<Collection<T>>(Dispatchers.IO) {
             executeInAsyncTransaction {
-
-                val simpleName = T::class.toTableName()
-                val finalData = mutableListOf<T>()
-                val transform: (ResultSet) -> Unit = { rs ->
-                    while (rs.next()) {
-                        val jsonBody = rs.getString(1)
-                        finalData.add(
-                            json.decodeFromString(
-                                T::class.serializer(),
-                                jsonBody
+                try {
+                    dbContext.set(schema)
+                    val simpleName = T::class.toTableName()
+                    val finalData = mutableListOf<T>()
+                    val transform: (ResultSet) -> Unit = { rs ->
+                        while (rs.next()) {
+                            val jsonBody = rs.getString(1)
+                            finalData.add(
+                                json.decodeFromString(
+                                    T::class.serializer(),
+                                    jsonBody
+                                )
                             )
-                        )
+                        }
                     }
-                }
-                val sqlStatement = """
+                    val sqlStatement = """
                                    |select JSON_BODY FROM $schema.$simpleName
                                    |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
                                """.trimMargin()
-                execWrapper(sqlStatement, transform)
-                finalData
+                    execWrapper(sqlStatement, transform = transform)
+                    finalData
+                } finally {
+                    dbContext.remove()
+                }
             }
         }
 
@@ -152,17 +163,25 @@ class StoreClient(val schema: String) {
 }
 
 inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
-    val (_, idValue) = idPair(any)
-    val simpleName = T::class.toTableName()
-    createJsonTable(schema, simpleName)
+    try {
+        dbContext.set(schema)
+        val (_, idValue) = idPair(any)
+        val simpleName = T::class.toTableName()
+        createJsonTable(schema, simpleName)
 
-    val json = json.encodeToString(T::class.serializer(), any)
-    val stmt =
-        """
+        val json = json.encodeToString(T::class.serializer(), any)
+        val stmt =
+            """
             |INSERT INTO $schema.${simpleName.toLowerCase()} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', '$json')
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
-    execWrapper(stmt)
+        val measureTime = measureTime {
+            execWrapper(stmt)
+        }
+        logger.debug { "Store object took: $measureTime" }
+    } finally {
+        dbContext.remove()
+    }
 }
 
 

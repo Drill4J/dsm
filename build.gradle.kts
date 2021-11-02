@@ -23,12 +23,15 @@ val serializationVersion: String by project
 val exposedVersion: String by project
 val postgresSqlVersion: String by project
 val hikariVersion: String by project
+val loggerVersion: String by project
 
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
     implementation(kotlin("reflect"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
+    implementation ("io.github.microutils:kotlin-logging-jvm:$loggerVersion")
+
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
 
@@ -57,7 +60,8 @@ kotlin {
         "kotlin.Experimental",
         "kotlinx.serialization.ImplicitReflectionSerializer",
         "kotlinx.serialization.InternalSerializationApi",
-        "kotlinx.serialization.ExperimentalSerializationApi"
+        "kotlinx.serialization.ExperimentalSerializationApi",
+        "kotlin.time.ExperimentalTime"
     ).let { annotations ->
         sourceSets.all { annotations.forEach(languageSettings::useExperimentalAnnotation) }
     }
