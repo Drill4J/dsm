@@ -71,6 +71,19 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertEquals(simpleObject1.last, last)
     }
 
+    //todo
+    /**
+     * options:
+     * 1) return null try-catch
+     * 2) create this table
+     * 3) put smth to it on App
+     */
+    @Test
+    fun `should retrieve null if table is not existed`() = runBlocking {
+        val simpleObject = agentStore.findById<SimpleObject>("12412d")
+        assertNull(simpleObject)
+    }
+
     @Test
     fun `should store and retrieve an object with all-default payload`() = runBlocking {
         val withDefaults = ObjectWithDefaults("some-id")
@@ -240,6 +253,7 @@ class DsmCoreTest : PostgresBased("plugin") {
         val retrievedMap = agentStore.findById<MapField>("test")?.map.orEmpty()
         assertEquals(5, retrievedMap[EnumExample.FIRST]?.int)
     }
+
 
     @Test
     fun `should delete all entities for a specified class`() = runBlocking<Unit> {
