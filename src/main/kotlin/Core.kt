@@ -92,6 +92,9 @@ class StoreClient(val schema: String) {
                         }
                     }
                     rs
+                } catch (e: Exception){
+                    //todo
+                    null
                 } finally {
                     dbContext.remove()
                 }
