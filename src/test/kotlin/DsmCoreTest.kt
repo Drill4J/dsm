@@ -19,7 +19,9 @@ package com.epam.dsm
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
+import org.junit.jupiter.api.*
 import kotlin.test.*
+import kotlin.test.Test
 
 class DsmCoreTest : PostgresBased("plugin") {
 
@@ -82,6 +84,12 @@ class DsmCoreTest : PostgresBased("plugin") {
     fun `should retrieve null if table is not existed`() = runBlocking {
         val simpleObject = agentStore.findById<SimpleObject>("12412d")
         assertNull(simpleObject)
+    }
+
+    @Test
+    fun `should retrieve empty collection if table does not exist`() = runBlocking {
+        val simpleObject = agentStore.findBy<SimpleObject> { SimpleObject::id eq "1" }
+        assertTrue(simpleObject.isEmpty())
     }
 
     @Test
@@ -212,12 +220,43 @@ class DsmCoreTest : PostgresBased("plugin") {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-                store(complexObject, "plugin")
+                store(complexObject, agentStore.schema)
                 fail("test")
             }
         } catch (ignored: Throwable) {
         }
         assertTrue(agentStore.getAll<ComplexObject>().isEmpty())
+    }
+
+    @Disabled //todo store without schema name
+    @Test
+    fun `should be transactional without schema name`() = runBlocking {
+        try {
+            @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
+            agentStore.executeInAsyncTransaction {
+//                store(complexObject)
+                fail("test")
+            }
+        } catch (ignored: Throwable) {
+        }
+        assertTrue(agentStore.getAll<ComplexObject>().isEmpty())
+    }
+
+    @Disabled//todo
+    @Test
+    fun `should be transactional when delete smth`() = runBlocking {
+        agentStore.store(complexObject.copy(id = "1"))
+        agentStore.store(complexObject.copy(id = "2"))
+        try {
+            @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
+            agentStore.executeInAsyncTransaction {
+                agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "1" }
+                fail("test")
+                agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "2" }
+            }
+        } catch (ignored: Throwable) {
+        }
+        assertEquals(2, agentStore.getAll<ComplexObject>().size)
     }
 
     @Test
