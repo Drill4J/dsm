@@ -126,6 +126,9 @@ class StoreClient(val schema: String) {
                                """.trimMargin()
                     execWrapper(sqlStatement, transform = transform)
                     finalData
+                } catch (e: Exception){
+                    //todo
+                    emptyList()
                 } finally {
                     dbContext.remove()
                 }
