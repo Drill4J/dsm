@@ -132,6 +132,15 @@ class DsmCoreTest : PostgresBased("plugin") {
     }
 
     @Test
+    fun `should delete object with startsWith expression`() = runBlocking {
+        agentStore.store(simpleObject)
+        agentStore.deleteBy<SimpleObject> {
+            (SimpleObject::id.startsWith("i"))
+        }
+        assertTrue(agentStore.getAll<SimpleObject>().isEmpty())
+    }
+
+    @Test
     fun `should remove entities of a complex object by ID recursively`() = runBlocking {
         agentStore.store(complexObject)
         agentStore.deleteById<ComplexObject>("str")

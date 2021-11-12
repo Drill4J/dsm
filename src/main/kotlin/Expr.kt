@@ -30,9 +30,12 @@ class Expr<Q : Any> {
 
 
     infix fun Expr<Q>.and(@Suppress("UNUSED_PARAMETER") expression: Expr<Q>): Expr<Q> {
-        conditions.add(conditions.size -1 ,"AND")
+        conditions.add(conditions.size - 1, "AND")
         return this
     }
 
+    infix fun <Q, R : Comparable<*>> KProperty1<Q, R>.startsWith(prefix: String) {
+        conditions.add("JSON_BODY->> '${this@startsWith.name}' like '$prefix%'")
+    }
 
 }

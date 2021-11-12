@@ -28,25 +28,19 @@ val loggerVersion: String by project
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
     implementation(kotlin("reflect"))
+    api("com.zaxxer:HikariCP:$hikariVersion")
+    api("org.jetbrains.exposed:exposed-core:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation ("io.github.microutils:kotlin-logging-jvm:$loggerVersion")
 
+    implementation("org.postgresql:postgresql:$postgresSqlVersion")
+    
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
-
-}
-
-dependencies {
-    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
-}
-
-dependencies {
-    implementation("org.testng:testng:7.1.0")
-    implementation("com.zaxxer:HikariCP:$hikariVersion")
-    implementation("org.postgresql:postgresql:$postgresSqlVersion")
     testImplementation("ru.yandex.qatools.embed:postgresql-embedded:2.10")
 }
 
