@@ -23,6 +23,7 @@ val serializationVersion: String by project
 val exposedVersion: String by project
 val postgresSqlVersion: String by project
 val hikariVersion: String by project
+val testContainerVersion: String by project
 val loggerVersion: String by project
 
 dependencies {
@@ -38,10 +39,10 @@ dependencies {
     implementation ("io.github.microutils:kotlin-logging-jvm:$loggerVersion")
 
     implementation("org.postgresql:postgresql:$postgresSqlVersion")
-    
+
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
-    testImplementation("ru.yandex.qatools.embed:postgresql-embedded:2.10")
+    testImplementation("org.testcontainers:postgresql:$testContainerVersion")
 }
 
 java.targetCompatibility = JavaVersion.VERSION_1_8

@@ -15,13 +15,11 @@
  */
 package com.epam.dsm
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
-import ru.yandex.qatools.embed.postgresql.EmbeddedPostgres
-import ru.yandex.qatools.embed.postgresql.distribution.Version
+import com.zaxxer.hikari.*
+import org.jetbrains.exposed.sql.transactions.*
+import org.junit.*
+import org.junit.jupiter.api.*
+import org.testcontainers.containers.*
 
 abstract class PostgresBased(private val schema: String) {
     val agentStore = StoreClient(schema)
@@ -35,47 +33,37 @@ abstract class PostgresBased(private val schema: String) {
 
     @kotlin.test.BeforeTest
     fun before() {
-        transaction {
+        transaction {//todo sometimes it is late
             exec("CREATE SCHEMA IF NOT EXISTS $schema")
         }
     }
 
     companion object {
-        lateinit var postgres: EmbeddedPostgres
+
+        @ClassRule//todo is it need?
 
         @BeforeAll
         @JvmStatic
         fun postgresSetup() {
-            postgres = EmbeddedPostgres(Version.V10_6)
-            val host = "localhost"
             val port = 5432
             val dbName = "dbName"
-            val userName = "userName"
-            val password = "password"
-            postgres.start(
-                host,
-                port,
-                dbName,
-                userName,
-                password
-            )
+            val postgresContainer = PostgreSQLContainer<Nothing>("postgres:12").apply {
+                withDatabaseName(dbName)
+                withExposedPorts(port)
+                start()
+            }
+            println("started container with id ${postgresContainer.containerId}.")
             Thread.sleep(5000) //todo :) timeout
             DatabaseFactory.init(HikariDataSource(HikariConfig().apply {
                 this.driverClassName = "org.postgresql.Driver"
-                this.jdbcUrl = "jdbc:postgresql://$host:$port/$dbName"
-                this.username = userName
-                this.password = password
+                this.jdbcUrl = "jdbc:postgresql://${postgresContainer.host}:${postgresContainer.getMappedPort(port)}/$dbName"
+                this.username = postgresContainer.username
+                this.password = postgresContainer.password
                 this.maximumPoolSize = 3
                 this.isAutoCommit = false
                 this.transactionIsolation = "TRANSACTION_REPEATABLE_READ"
                 this.validate()
             }))
-        }
-
-        @AfterAll
-        @JvmStatic
-        fun postgresClean() {
-            postgres.close()
         }
 
     }
