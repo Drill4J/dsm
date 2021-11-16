@@ -17,30 +17,31 @@ package com.epam.dsm
 
 import com.zaxxer.hikari.*
 import org.jetbrains.exposed.sql.transactions.*
-import org.junit.*
 import org.junit.jupiter.api.*
 import org.testcontainers.containers.*
 
 abstract class PostgresBased(private val schema: String) {
     val agentStore = StoreClient(schema)
 
-    @kotlin.test.AfterTest
+    @BeforeEach
+    fun before() {
+        transaction {
+            exec("CREATE SCHEMA IF NOT EXISTS $schema")
+        }
+        println("created schema")
+    }
+
+    @AfterEach
     fun after() {
+        Thread.sleep(500)//todo can be in val field
+        println("after test...")
         transaction {
             exec("DROP SCHEMA $schema CASCADE")
         }
     }
 
-    @kotlin.test.BeforeTest
-    fun before() {
-        transaction {//todo sometimes it is late
-            exec("CREATE SCHEMA IF NOT EXISTS $schema")
-        }
-    }
 
     companion object {
-
-        @ClassRule//todo is it need?
 
         @BeforeAll
         @JvmStatic
@@ -56,7 +57,8 @@ abstract class PostgresBased(private val schema: String) {
             Thread.sleep(5000) //todo :) timeout
             DatabaseFactory.init(HikariDataSource(HikariConfig().apply {
                 this.driverClassName = "org.postgresql.Driver"
-                this.jdbcUrl = "jdbc:postgresql://${postgresContainer.host}:${postgresContainer.getMappedPort(port)}/$dbName"
+                this.jdbcUrl =
+                    "jdbc:postgresql://${postgresContainer.host}:${postgresContainer.getMappedPort(port)}/$dbName"
                 this.username = postgresContainer.username
                 this.password = postgresContainer.password
                 this.maximumPoolSize = 3

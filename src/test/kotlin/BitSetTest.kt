@@ -18,7 +18,7 @@ package com.epam.dsm
 import com.epam.dsm.serializer.BitSetSerializer
 import com.epam.dsm.util.execWrapper
 import com.epam.dsm.util.toBitSet
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
@@ -59,8 +59,10 @@ class BitSetTest : PostgresBased("bitset") {
     @Test //todo split it to separate tests
     fun bitwiseOperations() = runBlocking {
         val size = 100
+        println("starting...")
         (0..size).forEach { i ->
             val id = "someIDhere$i"
+            println(id)
             agentStore.store(
                 BitsetClass(
                     id,
@@ -81,6 +83,7 @@ class BitSetTest : PostgresBased("bitset") {
 
         val emptyBitSet = BitSet(size)
         assertEquals(emptyBitSet, bitwise("bit_and"))
+        println("finished")
     }
 }
 

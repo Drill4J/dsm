@@ -24,7 +24,6 @@ import kotlin.test.*
 import kotlin.test.Test
 
 class DsmCoreTest : PostgresBased("plugin") {
-
     private val last = Last(2.toByte())
     private val blink = SubObject("subStr", 12, last)
     private val complexObject = ComplexObject("str", 'x', blink, EnumExample.SECOND, null)
