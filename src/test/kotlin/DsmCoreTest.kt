@@ -73,15 +73,8 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertEquals(simpleObject1.last, last)
     }
 
-    //todo
-    /**
-     * options:
-     * 1) return null try-catch
-     * 2) create this table
-     * 3) put smth to it on App
-     */
     @Test
-    fun `should retrieve null if table is not existed`() = runBlocking {
+    fun `should retrieve null if table does not exist`() = runBlocking {
         val simpleObject = agentStore.findById<SimpleObject>("12412d")
         assertNull(simpleObject)
     }
@@ -251,15 +244,16 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertTrue(agentStore.getAll<ComplexObject>().isEmpty())
     }
 
-    @Disabled//todo
+    @Disabled
     @Test
-    fun `should be transactional when delete smth`() = runBlocking {
+    fun `should be transactional when delete smth twice`() = runBlocking {
         agentStore.store(complexObject.copy(id = "1"))
         agentStore.store(complexObject.copy(id = "2"))
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-                agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "1" }
+//                agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "1" }
+//                deleteBy<ComplexObject> { ComplexObject::id eq "1" }
                 fail("test")
                 agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "2" }
             }
