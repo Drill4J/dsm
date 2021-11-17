@@ -221,7 +221,7 @@ class DsmCoreTest : PostgresBased("plugin") {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-                store(complexObject, agentStore.schema)
+                createTable(complexObject, agentStore.schema)
                 fail("test")
             }
         } catch (ignored: Throwable) {

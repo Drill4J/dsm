@@ -203,12 +203,11 @@
  */
 package com.epam.dsm.util
 
-import mu.KotlinLogging
-import org.jetbrains.exposed.sql.IColumnType
-import org.jetbrains.exposed.sql.Transaction
-import java.io.InputStream
-import java.sql.ResultSet
-import kotlin.reflect.KClass
+import mu.*
+import org.jetbrains.exposed.sql.*
+import java.io.*
+import java.sql.*
+import kotlin.reflect.*
 
 val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
@@ -223,11 +222,19 @@ fun KClass<*>.toTableName(): String {
 }
 
 fun Transaction.createJsonTable(schema: String, simpleName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb); ")
+    try {
+        execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb); ")
+    } catch (e: Exception) {
+        //nothing because it is race condition.
+    }
 }
 
 fun Transaction.createBinaryTable(schema: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea); ")
+    try {
+        execWrapper("CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea); ")
+    } catch (e: Exception) {
+        //nothing because it is race condition.
+    }
 }
 
 fun Transaction.putBinary(schema: String, id: String, value: ByteArray) {
