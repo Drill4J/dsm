@@ -19,11 +19,12 @@ import com.zaxxer.hikari.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.junit.jupiter.api.*
 import org.testcontainers.containers.*
+import kotlin.test.*
 
 abstract class PostgresBased(private val schema: String) {
     val agentStore = StoreClient(schema)
 
-    @BeforeEach
+    @BeforeTest
     fun before() {
         transaction {
             exec("CREATE SCHEMA IF NOT EXISTS $schema")
@@ -31,7 +32,7 @@ abstract class PostgresBased(private val schema: String) {
         println("created schema")
     }
 
-    @AfterEach
+    @AfterTest
     fun after() {
         Thread.sleep(500)//todo can be in val field
         println("after test...")

@@ -38,10 +38,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation ("io.github.microutils:kotlin-logging-jvm:$loggerVersion")
 
-    implementation("org.postgresql:postgresql:$postgresSqlVersion")
+    api("org.postgresql:postgresql:$postgresSqlVersion")
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
+    testImplementation("org.slf4j:slf4j-simple:1.7.32")
     testImplementation("org.testcontainers:postgresql:$testContainerVersion")
 }
 

@@ -18,14 +18,13 @@
 package com.epam.dsm
 
 import com.epam.dsm.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.serializer
-import org.jetbrains.exposed.sql.Transaction
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.transactions.transaction
-import java.sql.ResultSet
-import kotlin.time.measureTime
+import kotlinx.coroutines.*
+import kotlinx.serialization.*
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.*
+import org.jetbrains.exposed.sql.transactions.experimental.*
+import java.sql.*
+import kotlin.time.*
 
 class StoreClient(val schema: String) {
     init {
@@ -40,11 +39,14 @@ class StoreClient(val schema: String) {
         }
     }
 
-    suspend inline fun <reified T : Any> store(any: T) = run {
+    suspend inline fun <reified T : Any> store(any: T) : T {
+        executeInAsyncTransaction {
+            createTable(any, schema)
+        }
         executeInAsyncTransaction {
             store(any, schema)
         }
-        any
+        return any
     }
 
     suspend inline fun <reified T : Any> getAll(): Collection<T> =
@@ -92,7 +94,7 @@ class StoreClient(val schema: String) {
                         }
                     }
                     rs
-                } catch (e: Exception){
+                } catch (e: Exception) {
                     //todo
                     null
                 } finally {
@@ -126,7 +128,7 @@ class StoreClient(val schema: String) {
                                """.trimMargin()
                     execWrapper(sqlStatement, transform = transform)
                     finalData
-                } catch (e: Exception){
+                } catch (e: Exception) {
                     //todo
                     emptyList()
                 } finally {
@@ -168,12 +170,22 @@ class StoreClient(val schema: String) {
         }
 }
 
+inline fun <reified T : Any> Transaction.createTable(any: T, schema: String) {
+    try {
+        dbContext.set(schema)
+        val simpleName = T::class.toTableName()
+        logger.debug { "Store object took createJsonTable" }
+        createJsonTable(schema, simpleName)
+    } finally {
+        dbContext.remove()
+    }
+}
+
 inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     try {
         dbContext.set(schema)
         val (_, idValue) = idPair(any)
         val simpleName = T::class.toTableName()
-        createJsonTable(schema, simpleName)
 
         val json = json.encodeToString(T::class.serializer(), any)
         val stmt =
@@ -189,6 +201,4 @@ inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
         dbContext.remove()
     }
 }
-
-
 
