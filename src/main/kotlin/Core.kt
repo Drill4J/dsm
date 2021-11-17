@@ -39,12 +39,26 @@ class StoreClient(val schema: String) {
         }
     }
 
-    suspend inline fun <reified T : Any> store(any: T) : T {
-        executeInAsyncTransaction {
-            createTable(any, schema)
-        }
-        executeInAsyncTransaction {
-            store(any, schema)
+    suspend inline fun <reified T : Any> store(any: T): T {
+        var isError = false
+        runCatching {
+            executeInAsyncTransaction {
+                try {
+                    store(any, schema)
+                } catch (e: Exception) {
+                    rollback()//todo is it need?
+                    println("error happened")
+                    //it is race condition.
+                    //more details https://www.postgresql.org/message-id/CA%2BTgmoZAdYVtwBfp1FL2sMZbiHCWT4UPrzRLNnX1Nb30Ku3-gg%40mail.gmail.com
+                    isError = true
+                }
+            }
+            if (isError) {
+                println("try to store without creating table")
+                executeInAsyncTransaction {
+                    store(any, schema, isCreateTable = false)
+                }
+            }
         }
         return any
     }
@@ -170,22 +184,14 @@ class StoreClient(val schema: String) {
         }
 }
 
-inline fun <reified T : Any> Transaction.createTable(any: T, schema: String) {
-    try {
-        dbContext.set(schema)
-        val simpleName = T::class.toTableName()
-        logger.debug { "Store object took createJsonTable" }
-        createJsonTable(schema, simpleName)
-    } finally {
-        dbContext.remove()
-    }
-}
-
-inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
+inline fun <reified T : Any> Transaction.store(any: T, schema: String, isCreateTable: Boolean = true) {
     try {
         dbContext.set(schema)
         val (_, idValue) = idPair(any)
         val simpleName = T::class.toTableName()
+        if (isCreateTable) {
+            createJsonTable(schema, simpleName)
+        }
 
         val json = json.encodeToString(T::class.serializer(), any)
         val stmt =
