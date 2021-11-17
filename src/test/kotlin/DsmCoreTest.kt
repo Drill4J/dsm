@@ -162,6 +162,14 @@ class DsmCoreTest : PostgresBased("plugin") {
     }
 
     @Test
+    fun `should store the same object`() = runBlocking {
+        agentStore.store(complexObject)
+        agentStore.store(complexObject)
+        val all = agentStore.getAll<ComplexObject>()
+        assertEquals(1, all.size)
+    }
+
+    @Test
     fun `should store and retrieve object with primitive collection`() = runBlocking {
         agentStore.store(ObjectWithPrimitiveElementsCollection(1, listOf("st1", "st2")))
         val all = agentStore.getAll<ObjectWithPrimitiveElementsCollection>()
@@ -221,7 +229,7 @@ class DsmCoreTest : PostgresBased("plugin") {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-                createTable(complexObject, agentStore.schema)
+                store(complexObject, agentStore.schema)
                 fail("test")
             }
         } catch (ignored: Throwable) {

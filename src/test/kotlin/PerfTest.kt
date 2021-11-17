@@ -20,7 +20,8 @@ import kotlin.test.*
 
 class PerfTest : PostgresBased("perf_test") {
 
-    @Test//yandex embedded db cannot do it.
+    //yandex embedded db cannot do it.
+    @Test
     fun `should make queries sequence`() = runBlocking {
         repeat(100) {
             println("$it starting")
@@ -50,7 +51,6 @@ class PerfTest : PostgresBased("perf_test") {
         }
     }
 
-    //testcontainers and docker cannot do it
     @Test
     fun `should parallel store`() = runBlocking {
         val times = 2
@@ -64,8 +64,6 @@ class PerfTest : PostgresBased("perf_test") {
             list.add(job)
         }
         joinAll(list.first(), list[1])
-//        Thread.sleep(2000)
-//        delay(1000)
         assertEquals(times, agentStore.getAll<SimpleObject>().size)
     }
 
