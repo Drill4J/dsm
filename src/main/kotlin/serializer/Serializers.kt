@@ -204,7 +204,7 @@
 package com.epam.dsm.serializer
 
 import com.epam.dsm.util.*
-import kotlinx.serialization.KSerializer
+import kotlinx.serialization.*
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor

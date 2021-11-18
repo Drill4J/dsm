@@ -203,6 +203,7 @@
  */
 package com.epam.dsm.util
 
+import com.github.luben.zstd.*
 import mu.*
 import org.jetbrains.exposed.sql.*
 import java.io.*
@@ -242,7 +243,7 @@ fun Transaction.createBinaryTable(schema: String) {
 
 fun Transaction.putBinary(schema: String, id: String, value: ByteArray) {
     val prepareStatement = connection.prepareStatement("INSERT INTO $schema.BINARYA VALUES ('$id', ?)", false)
-    prepareStatement[1] = value
+    prepareStatement[1] = Zstd.compress(value)
     prepareStatement.executeUpdate()
 }
 
@@ -253,7 +254,8 @@ fun Transaction.getBinary(schema: String, id: String): ByteArray {
     )
     val executeQuery = prepareStatement.executeQuery()
     return if (executeQuery.next()) {
-        executeQuery.getBytes(1)
+        val bytes = executeQuery.getBytes(1)
+        Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt())
     } else byteArrayOf() //todo or throw error?
 }
 
@@ -264,15 +266,9 @@ fun Transaction.getBinaryAsStream(schema: String, id: String): InputStream {
     )
     val executeQuery = prepareStatement.executeQuery()
     return if (executeQuery.next())
-        executeQuery.getBinaryStream(1)
+        ZstdInputStream(executeQuery.getBinaryStream(1))
     else ByteArrayInputStream(ByteArray(0)) //todo or throw error?
 
-}
-
-fun Transaction.putBinary(schema: String, id: String, value: InputStream) {
-    val prepareStatement = connection.prepareStatement("INSERT INTO $schema.BINARYA VALUES ('$id', ?)", false)
-    prepareStatement.setInputStream(1, value)
-    prepareStatement.executeUpdate()
 }
 
 fun Transaction.execWrapper(
