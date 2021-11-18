@@ -15,13 +15,20 @@
  */
 package com.epam.dsm
 
-import com.epam.dsm.serializer.BinarySerializer
-import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.Serializable
+import com.epam.dsm.serializer.*
+import com.epam.dsm.util.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.*
+import org.jetbrains.exposed.sql.transactions.*
+import org.junit.jupiter.api.*
+import kotlin.test.*
 import kotlin.test.Test
-import kotlin.test.assertEquals
 
-class BinaryTest : PostgresBased("binary_test") {
+class BinaryTest : PostgresBased(schema) {
+
+    companion object {
+        private const val schema: String = "binary_test"
+    }
 
     @Serializable
     data class BinaryClass(
@@ -29,15 +36,34 @@ class BinaryTest : PostgresBased("binary_test") {
         val id: String,
         @Suppress("ArrayInDataClass")
         @Serializable(with = BinarySerializer::class)
-        val bytes: ByteArray
+        val bytes: ByteArray,
     )
 
+    @BeforeEach
+    fun `create binary table`() = transaction {
+        createBinaryTable(schema)
+    }
 
     @Test
-    fun shouldStoreAndRetrieveBinaryData() = runBlocking {
+    fun `should store and retrieve binary data`() = runBlocking {
         val id = "someIDhere"
         val any = BinaryClass(id, byteArrayOf(1, 0, 1))
         agentStore.store(any)
         assertEquals(any.bytes.contentToString(), agentStore.findById<BinaryClass>(id)?.bytes?.contentToString())
     }
+
+    @Test
+    fun `should store and retrieve binary data steam`() {
+        val id = "id"
+        val binary = byteArrayOf(-48, -94, -47, -117, 32, -48, -65, -48, -72, -48, -76, -48, -66, -47, -128, 33, 33)
+        transaction {
+            putBinary(schema, id, binary)
+        }
+        val actual = transaction {
+            getBinaryAsStream(schema, "id")
+        }.readBytes()
+
+        assertEquals(binary.contentToString(), actual.contentToString())
+    }
+
 }
