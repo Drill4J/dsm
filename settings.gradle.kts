@@ -19,3 +19,5 @@ pluginManagement {
         maven("https://dl.bintray.com/kotlin/kotlinx")
     }
 }
+
+include(":benchmarks")

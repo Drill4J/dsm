@@ -231,7 +231,10 @@ fun Transaction.createJsonTable(schema: String, simpleName: String) {
 
 fun Transaction.createBinaryTable(schema: String) {
     try {
-        execWrapper("CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea); ")
+        execWrapper("""
+             CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea);
+             ALTER TABLE $schema.BINARYA ALTER COLUMN binarya SET STORAGE EXTERNAL; 
+             """.trimIndent())
     } catch (e: Exception) {
         //nothing because it is race condition.
     }
@@ -249,9 +252,20 @@ fun Transaction.getBinary(schema: String, id: String): ByteArray {
                 "WHERE id = '$id'", false
     )
     val executeQuery = prepareStatement.executeQuery()
-    return if (executeQuery.next())
+    return if (executeQuery.next()) {
         executeQuery.getBytes(1)
-    else byteArrayOf() //todo or throw error?
+    } else byteArrayOf() //todo or throw error?
+}
+
+fun Transaction.getBinaryAsStream(schema: String, id: String): InputStream {
+    val prepareStatement = connection.prepareStatement(
+        "SELECT BINARYA FROM $schema.BINARYA " +
+                "WHERE id = '$id'", false
+    )
+    val executeQuery = prepareStatement.executeQuery()
+    return if (executeQuery.next())
+        executeQuery.getBinaryStream(1)
+    else ByteArrayInputStream(ByteArray(0)) //todo or throw error?
 
 }
 
@@ -264,7 +278,7 @@ fun Transaction.putBinary(schema: String, id: String, value: InputStream) {
 fun Transaction.execWrapper(
     sqlStatement: String,
     args: Iterable<Pair<IColumnType, Any?>> = emptyList(),
-    transform: (ResultSet) -> Unit = {}
+    transform: (ResultSet) -> Unit = {},
 ) {
     logger.trace { "SQL statement: $sqlStatement" }
     exec(sqlStatement, args, transform = transform)
