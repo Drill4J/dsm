@@ -27,8 +27,6 @@ import org.jetbrains.exposed.sql.transactions.experimental.*
 import java.sql.*
 import kotlin.time.*
 
-val logger = KotlinLogging.logger {}
-
 class StoreClient(val schema: String) {
     init {
         transaction {
@@ -49,10 +47,10 @@ class StoreClient(val schema: String) {
                 try {
                     store(any, schema)
                 } catch (e: Exception) {
-                    rollback()//todo is it need?
                     logger.debug { "error happened" }
-                    //it is race condition.
+                    //when create table it can be race condition
                     //more details https://www.postgresql.org/message-id/CA%2BTgmoZAdYVtwBfp1FL2sMZbiHCWT4UPrzRLNnX1Nb30Ku3-gg%40mail.gmail.com
+                    rollback()
                     isError = true
                 }
             }
