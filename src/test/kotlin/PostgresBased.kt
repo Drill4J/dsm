@@ -30,13 +30,10 @@ abstract class PostgresBased(private val schema: String) {
         transaction {
             exec("CREATE SCHEMA IF NOT EXISTS $schema")
         }
-        println("created schema")
     }
 
     @AfterTest
     fun after() {
-        Thread.sleep(500)//todo can be in val field
-        println("after test...")
         transaction {
             exec("DROP SCHEMA $schema CASCADE")
         }

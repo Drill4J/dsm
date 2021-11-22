@@ -20,7 +20,6 @@ import kotlin.test.*
 
 class PerfTest : PostgresBased("perf_test") {
 
-    //yandex embedded db cannot do it.
     @Test
     fun `should make queries sequence`() = runBlocking {
         repeat(100) {
@@ -63,7 +62,7 @@ class PerfTest : PostgresBased("perf_test") {
             }
             list.add(job)
         }
-        joinAll(list.first(), list[1])
+        joinAll(*list.toTypedArray())
         assertEquals(times, agentStore.getAll<SimpleObject>().size)
     }
 
