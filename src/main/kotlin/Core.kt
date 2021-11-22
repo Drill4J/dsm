@@ -20,11 +20,14 @@ package com.epam.dsm
 import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
+import mu.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
 import java.sql.*
 import kotlin.time.*
+
+val logger = KotlinLogging.logger {}
 
 class StoreClient(val schema: String) {
     init {
@@ -47,14 +50,14 @@ class StoreClient(val schema: String) {
                     store(any, schema)
                 } catch (e: Exception) {
                     rollback()//todo is it need?
-                    println("error happened")
+                    logger.debug { "error happened" }
                     //it is race condition.
                     //more details https://www.postgresql.org/message-id/CA%2BTgmoZAdYVtwBfp1FL2sMZbiHCWT4UPrzRLNnX1Nb30Ku3-gg%40mail.gmail.com
                     isError = true
                 }
             }
             if (isError) {
-                println("try to store without creating table")
+                logger.debug { "try to store without creating table..." }
                 executeInAsyncTransaction {
                     store(any, schema, isCreateTable = false)
                 }
