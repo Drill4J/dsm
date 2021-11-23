@@ -30,9 +30,8 @@ class CompressTest {
             }
             println("started container with id ${postgresContainer.containerId}.")
             DatabaseFactory.init(HikariDataSource(HikariConfig().apply {
-                this.driverClassName = "org.postgresql.Driver"
-                this.jdbcUrl =
-                    "jdbc:postgresql://${postgresContainer.host}:${postgresContainer.getMappedPort(port)}/$dbName"
+                this.driverClassName = postgresContainer.driverClassName
+                this.jdbcUrl = postgresContainer.jdbcUrl
                 this.username = postgresContainer.username
                 this.password = postgresContainer.password
                 this.maximumPoolSize = 3

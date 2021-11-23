@@ -18,9 +18,11 @@
 package com.epam.dsm
 
 import com.epam.dsm.util.*
+import kotlinx.atomicfu.*
+import kotlinx.collections.immutable.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.*
 import kotlinx.serialization.*
-import mu.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
@@ -41,25 +43,8 @@ class StoreClient(val schema: String) {
     }
 
     suspend inline fun <reified T : Any> store(any: T): T {
-        var isError = false
-        runCatching {
-            executeInAsyncTransaction {
-                try {
-                    store(any, schema)
-                } catch (e: Exception) {
-                    logger.debug { "error happened" }
-                    //when create table it can be race condition
-                    //more details https://www.postgresql.org/message-id/CA%2BTgmoZAdYVtwBfp1FL2sMZbiHCWT4UPrzRLNnX1Nb30Ku3-gg%40mail.gmail.com
-                    rollback()
-                    isError = true
-                }
-            }
-            if (isError) {
-                logger.debug { "try to store without creating table..." }
-                executeInAsyncTransaction {
-                    store(any, schema, isCreateTable = false)
-                }
-            }
+        executeInAsyncTransaction {
+            store(any, schema)
         }
         return any
     }
@@ -185,13 +170,19 @@ class StoreClient(val schema: String) {
         }
 }
 
-inline fun <reified T : Any> Transaction.store(any: T, schema: String, isCreateTable: Boolean = true) {
+val atomicState = AtomicState()
+
+suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     try {
         dbContext.set(schema)
         val (_, idValue) = idPair(any)
         val simpleName = T::class.toTableName()
-        if (isCreateTable) {
-            createJsonTable(schema, simpleName)
+        val tableKey = "$schema:$simpleName"
+        if (atomicState.isNeedCreateTable(tableKey)) {
+            transaction {
+                createJsonTable(schema, simpleName)
+            }
+            atomicState.update(tableKey, AtomicState.TableState.CREATED)
         }
 
         val json = json.encodeToString(T::class.serializer(), any)
@@ -201,11 +192,61 @@ inline fun <reified T : Any> Transaction.store(any: T, schema: String, isCreateT
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
         val measureTime = measureTime {
+            waitUntilTableCreate(tableKey)
             execWrapper(stmt)
         }
         logger.debug { "Store object took: $measureTime" }
     } finally {
         dbContext.remove()
     }
+}
+
+suspend fun waitUntilTableCreate(key: String) {
+    while (true) {
+        if (!atomicState.isCreatedTable(key)) {
+            delay(10)
+        } else break
+    }
+}
+
+
+//todo class is hack for atomic. After update version it will able to remove
+class AtomicState {
+    private val mutex = Mutex()
+    private val tableStates = atomic(persistentHashMapOf<String, TableState>())
+
+    enum class TableState {
+        CREATING,
+        CREATED
+    }
+
+    suspend fun isNeedCreateTable(key: String): Boolean {
+        logger.trace { "isCreatingFirst $key" }
+        if (tableStates.value[key] == null) {//todo is it faster?
+            mutex.withLock {
+                if (tableStates.value[key] == null) {
+                    tableStates.update {
+                        it.put(key, TableState.CREATING)
+                    }
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    fun update(key: String, tableState: TableState) {
+        logger.trace { "update $key state $tableState" }
+        tableStates.update {
+            it.put(key, tableState)
+        }
+    }
+
+    fun isCreatedTable(key: String): Boolean = tableStates.value[key] == TableState.CREATED
+
+    fun clear() {
+        tableStates.update { it.clear() }
+    }
+
 }
 

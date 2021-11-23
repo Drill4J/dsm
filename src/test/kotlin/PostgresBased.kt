@@ -22,7 +22,7 @@ import org.testcontainers.containers.*
 import org.testcontainers.containers.wait.strategy.*
 import kotlin.test.*
 
-abstract class PostgresBased(private val schema: String) {
+abstract class PostgresBased(val schema: String) {
     val agentStore = StoreClient(schema)
 
     @BeforeTest
@@ -37,17 +37,19 @@ abstract class PostgresBased(private val schema: String) {
         transaction {
             exec("DROP SCHEMA $schema CASCADE")
         }
+        atomicState.clear()
     }
 
 
     companion object {
 
+        lateinit var postgresContainer: PostgreSQLContainer<Nothing>
         @BeforeAll
         @JvmStatic
         fun postgresSetup() {
             val port = 5432
             val dbName = "dbName"
-            val postgresContainer = PostgreSQLContainer<Nothing>("postgres:12").apply {
+            postgresContainer = PostgreSQLContainer<Nothing>("postgres:12").apply {
                 withDatabaseName(dbName)
                 withExposedPorts(port)
                 waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\s", 2))
@@ -55,9 +57,8 @@ abstract class PostgresBased(private val schema: String) {
             }
             println("started container with id ${postgresContainer.containerId}.")
             DatabaseFactory.init(HikariDataSource(HikariConfig().apply {
-                this.driverClassName = "org.postgresql.Driver"
-                this.jdbcUrl =
-                    "jdbc:postgresql://${postgresContainer.host}:${postgresContainer.getMappedPort(port)}/$dbName"
+                this.driverClassName = postgresContainer.driverClassName
+                this.jdbcUrl = postgresContainer.jdbcUrl
                 this.username = postgresContainer.username
                 this.password = postgresContainer.password
                 this.maximumPoolSize = 3
@@ -65,6 +66,12 @@ abstract class PostgresBased(private val schema: String) {
                 this.transactionIsolation = "TRANSACTION_REPEATABLE_READ"
                 this.validate()
             }))
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun shutDown() {
+            postgresContainer.stop()
         }
 
     }

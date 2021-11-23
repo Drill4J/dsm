@@ -5,6 +5,7 @@ plugins {
     kotlin("plugin.serialization")
     id("com.github.hierynomus.license")
     id("org.jetbrains.kotlin.plugin.noarg")
+    id("kotlinx-atomicfu")
     `maven-publish`
 }
 
@@ -26,6 +27,7 @@ val hikariVersion: String by project
 val testContainerVersion: String by project
 val loggerVersion: String by project
 val zstVersion: String by project
+val collectionImmutableVersion: String by extra
 
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
@@ -41,6 +43,7 @@ dependencies {
 
     api("org.postgresql:postgresql:$postgresSqlVersion")
     implementation("com.github.luben:zstd-jni:$zstVersion")
+    implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:$collectionImmutableVersion")
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")

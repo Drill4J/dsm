@@ -225,6 +225,19 @@ class DsmCoreTest : PostgresBased("plugin") {
     }
 
     @Test
+    fun `should be transactional with double storing`() = runBlocking {
+        try {
+            @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
+            agentStore.executeInAsyncTransaction {
+                store(complexObject, agentStore.schema)
+                store(complexObject.copy(id = "second"), agentStore.schema)
+            }
+        } catch (ignored: Throwable) {
+        }
+        assertEquals(2, agentStore.getAll<ComplexObject>().size)
+    }
+
+    @Test
     fun `should be transactional`() = runBlocking {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")

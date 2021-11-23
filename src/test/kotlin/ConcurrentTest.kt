@@ -18,25 +18,24 @@ package com.epam.dsm
 import kotlinx.coroutines.*
 import kotlin.test.*
 
-class PerfTest : PostgresBased("perf_test") {
+class ConcurrentTest : PostgresBased("concurrent_test") {
+    private val simpleObject = SimpleObject("id", "subStr", 12, Last(2.toByte()))
 
     @Test
     fun `should make queries sequence`() = runBlocking {
         repeat(100) {
             println("$it starting")
-            val simpleObject = agentStore.findById<SimpleObject>("12412$it")
+            val simpleObject = agentStore.findById<SimpleObject>("id$it")
             assertNull(simpleObject)
             println("$it finished")
         }
     }
 
     @Test
-    fun `should parallel find`() {
-        runBlocking {
-            repeat(10) {
-                launch(Dispatchers.Default) {
-                    agentStore.findById<SimpleObject>("12412$it")
-                }
+    fun `should parallel find`() = runBlocking {
+        repeat(10) {
+            launch(Dispatchers.Default) {
+                agentStore.findById<SimpleObject>("id$it")
             }
         }
     }
@@ -45,19 +44,39 @@ class PerfTest : PostgresBased("perf_test") {
     fun `should store sequence`() = runBlocking {
         repeat(100) {
             println("store $it")
-            agentStore.store(SimpleObject("agent$it", "", 1, Last(2.toByte())))
+            agentStore.store(simpleObject.copy(id = "agent$it"))
             println("$it finished")
         }
+        println("finished")
+        assertEquals(100, agentStore.getAll<SimpleObject>().size)
     }
 
     @Test
     fun `should parallel store`() = runBlocking {
-        val times = 2
         val list = mutableListOf<Job>()
+        val times = 2
         repeat(times) {
             val job = launch(Dispatchers.Default) {
                 println("store $it")
-                agentStore.store(SimpleObject("agent$it", "", 1, Last(2.toByte())))
+                agentStore.store(simpleObject.copy(id = "agent$it"))
+                println("finished $it")
+            }
+            list.add(job)
+        }
+        joinAll(*list.toTypedArray())
+        assertEquals(times, agentStore.getAll<SimpleObject>().size)
+    }
+
+    @Test
+    fun `should parallel store in one transaction`() = runBlocking {
+        val list = mutableListOf<Job>()
+        val times = 2
+        repeat(times) {
+            val job = launch(Dispatchers.Default) {
+                println("storing $it...")
+                agentStore.executeInAsyncTransaction {
+                    store(simpleObject.copy(id = "agent$it"), agentStore.schema)
+                }
                 println("finished $it")
             }
             list.add(job)
