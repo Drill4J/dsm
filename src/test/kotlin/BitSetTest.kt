@@ -53,6 +53,7 @@ class BitSetTest : PostgresBased("bitset") {
                 btst
             )
         )
+        println("finished")
         assertEquals(btst, agentStore.findById<BitsetClass>(id)?.btst)
     }
 
