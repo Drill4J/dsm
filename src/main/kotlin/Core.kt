@@ -45,6 +45,7 @@ class StoreClient(val schema: String) {
         executeInAsyncTransaction {
             store(any, schema)
         }
+        any
     }
 
     suspend inline fun <reified T : Any> getAll(): Collection<T> =
@@ -193,13 +194,13 @@ suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
 val createdTables = persistentSetOf<String>()
 val mutex = Mutex()
 
-suspend fun prepareTable(schema: String, simpleName: String) {
-    val tableKey = "$schema:$simpleName"
+suspend fun prepareTable(schema: String, tableName: String = "") {
+    val tableKey = "$schema:$tableName"
     if (!createdTables.contains(tableKey)) {
         mutex.withLock {
             if (!createdTables.contains(tableKey)) {
                 transaction {
-                    createJsonTable(schema, simpleName)
+                    createJsonTable(schema, tableName)
                 }
                 createdTables.add(tableKey)
             }

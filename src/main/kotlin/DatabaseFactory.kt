@@ -212,7 +212,7 @@ object DatabaseFactory {
         Database.connect(hikari())
     }
 
-    fun init(hikariDataSource:HikariDataSource) {
+    fun init(hikariDataSource: HikariDataSource) {
         Database.connect(hikariDataSource)
     }
 

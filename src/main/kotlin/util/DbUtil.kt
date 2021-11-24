@@ -234,6 +234,7 @@ fun Transaction.createBinaryTable(schema: String) {
              ALTER TABLE $schema.BINARYA ALTER COLUMN binarya SET STORAGE EXTERNAL; 
              """.trimIndent()
     )
+    commit()
 }
 
 fun Transaction.putBinary(schema: String, id: String, value: ByteArray) {
