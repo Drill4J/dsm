@@ -37,7 +37,7 @@ abstract class PostgresBased(val schema: String) {
         transaction {
             exec("DROP SCHEMA $schema CASCADE")
         }
-        atomicState.clear()
+        createdTables.clear()
     }
 
 
