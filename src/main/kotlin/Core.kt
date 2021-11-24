@@ -171,11 +171,10 @@ class StoreClient(val schema: String) {
 
 suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     try {
-        dbContext.set(schema)
         val (_, idValue) = idPair(any)
         val simpleName = T::class.toTableName()
         prepareTable(schema, simpleName)
-
+        dbContext.set(schema)
         val json = json.encodeToString(T::class.serializer(), any)
         val stmt =
             """

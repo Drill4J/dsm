@@ -39,11 +39,6 @@ class BinaryTest : PostgresBased(schema) {
         val bytes: ByteArray,
     )
 
-    @BeforeEach
-    fun `create binary table`() = transaction {
-        createBinaryTable(schema)
-    }
-
     @Test
     fun `should store and retrieve binary data`() = runBlocking {
         val id = "someIDhere"
@@ -54,6 +49,9 @@ class BinaryTest : PostgresBased(schema) {
 
     @Test
     fun `should store and retrieve binary data steam`() {
+        transaction {
+            createBinaryTable(schema)
+        }
         val id = "id"
         val binary = byteArrayOf(-48, -94, -47, -117, 32, -48, -65, -48, -72, -48, -76, -48, -66, -47, -128, 33, 33)
         transaction {
