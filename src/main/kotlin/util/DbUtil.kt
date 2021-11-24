@@ -223,22 +223,16 @@ fun KClass<*>.toTableName(): String {
 }
 
 fun Transaction.createJsonTable(schema: String, simpleName: String) {
-    try {
-        execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb); ")
-    } catch (e: Exception) {
-        //nothing because it is race condition.
-    }
+    execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb); ")
 }
 
 fun Transaction.createBinaryTable(schema: String) {
-    try {
-        execWrapper("""
+    execWrapper(
+        """
              CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea);
              ALTER TABLE $schema.BINARYA ALTER COLUMN binarya SET STORAGE EXTERNAL; 
-             """.trimIndent())
-    } catch (e: Exception) {
-        //nothing because it is race condition.
-    }
+             """.trimIndent()
+    )
 }
 
 fun Transaction.putBinary(schema: String, id: String, value: ByteArray) {

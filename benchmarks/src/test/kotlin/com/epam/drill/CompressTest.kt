@@ -20,11 +20,9 @@ class CompressTest {
 
     companion object {
         init {
-            val port = 5432
-            val dbName = "dbName"
             val postgresContainer = PostgreSQLContainer<Nothing>("postgres:12").apply {
-                withDatabaseName(dbName)
-                withExposedPorts(port)
+                withDatabaseName("dbName")
+                withExposedPorts(PostgreSQLContainer.POSTGRESQL_PORT)
                 waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\s", 2))
                 start()
             }
