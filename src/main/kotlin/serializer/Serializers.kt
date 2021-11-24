@@ -235,7 +235,7 @@ object BinarySerializer : KSerializer<ByteArray> {
 
     override fun serialize(encoder: Encoder, value: ByteArray) {
         val schema = dbContext.get() ?: "global"
-        transaction {
+        transaction {//todo use prepareTable
             createBinaryTable(schema)
         }
         val id = UUID.randomUUID().toString()
