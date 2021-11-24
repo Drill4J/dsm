@@ -18,7 +18,6 @@
 package com.epam.dsm
 
 import com.epam.dsm.util.*
-import kotlinx.atomicfu.*
 import kotlinx.collections.immutable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
@@ -42,11 +41,10 @@ class StoreClient(val schema: String) {
         }
     }
 
-    suspend inline fun <reified T : Any> store(any: T): T {
+    suspend inline fun <reified T : Any> store(any: T) = run {
         executeInAsyncTransaction {
             store(any, schema)
         }
-        return any
     }
 
     suspend inline fun <reified T : Any> getAll(): Collection<T> =
@@ -170,21 +168,12 @@ class StoreClient(val schema: String) {
         }
 }
 
-val atomicState = AtomicState()
-
 suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     try {
         dbContext.set(schema)
         val (_, idValue) = idPair(any)
         val simpleName = T::class.toTableName()
-        val tableKey = "$schema:$simpleName"
-        if (atomicState.isNeedCreateTable(tableKey)) {
-            transaction {
-                createJsonTable(schema, simpleName)
-                commit()
-            }
-            atomicState.update(tableKey, AtomicState.TableState.CREATED)
-        }
+        prepareTable(schema, simpleName)
 
         val json = json.encodeToString(T::class.serializer(), any)
         val stmt =
@@ -193,7 +182,6 @@ suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
         val measureTime = measureTime {
-            waitUntilTableCreate(tableKey)
             execWrapper(stmt)
         }
         logger.debug { "Store object took: $measureTime" }
@@ -202,53 +190,19 @@ suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     }
 }
 
-suspend fun waitUntilTableCreate(key: String) {
-    while (true) {
-        if (!atomicState.isCreatedTable(key)) {
-            delay(10)
-        } else break
-    }
-}
+val createdTables = persistentSetOf<String>()
+val mutex = Mutex()
 
-
-//todo class is hack for atomic. After update version it will able to remove
-class AtomicState {
-    private val mutex = Mutex()
-    private val tableStates = atomic(persistentHashMapOf<String, TableState>())
-
-    enum class TableState {
-        CREATING,
-        CREATED
-    }
-
-    suspend fun isNeedCreateTable(key: String): Boolean {
-        logger.trace { "isCreatingFirst $key" }
-        if (tableStates.value[key] == null) {//todo is it faster?
-            mutex.withLock {
-                if (tableStates.value[key] == null) {
-                    logger.trace { "table '$key' is creating..."}
-                    tableStates.update {
-                        it.put(key, TableState.CREATING)
-                    }
-                    return true
+suspend fun prepareTable(schema: String, simpleName: String) {
+    val tableKey = "$schema:$simpleName"
+    if (!createdTables.contains(tableKey)) {
+        mutex.withLock {
+            if (!createdTables.contains(tableKey)) {
+                transaction {
+                    createJsonTable(schema, simpleName)
                 }
+                createdTables.add(tableKey)
             }
         }
-        return false
     }
-
-    fun update(key: String, tableState: TableState) {
-        logger.trace { "update $key state $tableState" }
-        tableStates.update {
-            it.put(key, tableState)
-        }
-    }
-
-    fun isCreatedTable(key: String): Boolean = tableStates.value[key] == TableState.CREATED
-
-    fun clear() {
-        tableStates.update { it.clear() }
-    }
-
 }
-

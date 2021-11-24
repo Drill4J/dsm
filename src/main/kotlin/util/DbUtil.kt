@@ -224,6 +224,7 @@ fun KClass<*>.toTableName(): String {
 
 fun Transaction.createJsonTable(schema: String, simpleName: String) {
     execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb); ")
+    commit()
 }
 
 fun Transaction.createBinaryTable(schema: String) {

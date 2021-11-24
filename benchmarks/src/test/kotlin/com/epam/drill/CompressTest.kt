@@ -56,7 +56,6 @@ class CompressTest {
 
     @TearDown
     fun after() {
-        Thread.sleep(500)
         println("after benchmark...")
         transaction {
             val result = connection.prepareStatement(
