@@ -181,6 +181,7 @@ suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
         if (atomicState.isNeedCreateTable(tableKey)) {
             transaction {
                 createJsonTable(schema, simpleName)
+                commit()
             }
             atomicState.update(tableKey, AtomicState.TableState.CREATED)
         }
@@ -225,6 +226,7 @@ class AtomicState {
         if (tableStates.value[key] == null) {//todo is it faster?
             mutex.withLock {
                 if (tableStates.value[key] == null) {
+                    logger.trace { "table '$key' is creating..."}
                     tableStates.update {
                         it.put(key, TableState.CREATING)
                     }
