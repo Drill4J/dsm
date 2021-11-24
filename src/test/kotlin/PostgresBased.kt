@@ -16,6 +16,7 @@
 package com.epam.dsm
 
 import com.zaxxer.hikari.*
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.junit.jupiter.api.*
 import org.testcontainers.containers.*
@@ -55,16 +56,12 @@ abstract class PostgresBased(val schema: String) {
                 start()
             }
             println("started container with id ${postgresContainer.containerId}.")
-            DatabaseFactory.init(HikariDataSource(HikariConfig().apply {
-                this.driverClassName = postgresContainer.driverClassName
-                this.jdbcUrl = postgresContainer.jdbcUrl
-                this.username = postgresContainer.username
-                this.password = postgresContainer.password
-                this.maximumPoolSize = 3
-                this.isAutoCommit = false
-                this.transactionIsolation = "TRANSACTION_REPEATABLE_READ"
-                this.validate()
-            }))
+            Database.connect(
+                driver = postgresContainer.driverClassName,
+                url = postgresContainer.jdbcUrl,
+                user = postgresContainer.username,
+                password = postgresContainer.password
+            )
         }
 
         @AfterAll
