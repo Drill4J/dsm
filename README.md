@@ -26,7 +26,7 @@ val agentStore = StoreClient("schema_name")
 val simpleObject = SimpleObject("id", "subStr", 12, Last(2.toByte()))
 agentStore.store(simpleObject)
 ```
-in DB will create table 'simple_object'
+in DB will create table 'simple_object' in schema 'schema_name'
 
 # Local
 need to start Docker to run tests
