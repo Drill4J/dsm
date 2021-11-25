@@ -211,8 +211,8 @@ import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.lang.RuntimeException
 import java.util.*
-
 
 //search select bit_or(Cast(JSON_BODY->>'bitset' as BIT VARYING(10000000))) FROM bittest.bitset_class
 object BitSetSerializer : KSerializer<BitSet> {
@@ -234,7 +234,8 @@ object BitSetSerializer : KSerializer<BitSet> {
 object BinarySerializer : KSerializer<ByteArray> {
 
     override fun serialize(encoder: Encoder, value: ByteArray) {
-        val schema = dbContext.get() ?: "global"
+        //TODO EPMDJ-9213 get schema from TransactionManagement or connection
+        val schema = dbContext.get() ?: throw RuntimeException("Cannot find schema. Lost db context")
         transaction {//todo use prepareTable
             createBinaryTable(schema)
         }
@@ -248,7 +249,7 @@ object BinarySerializer : KSerializer<ByteArray> {
 
     override fun deserialize(decoder: Decoder): ByteArray {
         val id = decoder.decodeSerializableValue(String.serializer())
-        val schema = dbContext.get() ?: "global"
+        val schema = dbContext.get() ?: throw RuntimeException("Cannot find schema. Lost db context")
         return transaction { getBinary(schema, id) }
     }
 

@@ -44,11 +44,11 @@ dependencies {
     api("org.postgresql:postgresql:$postgresSqlVersion")
     implementation("com.github.luben:zstd-jni:$zstVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:$collectionImmutableVersion")
+    implementation("org.testcontainers:postgresql:$testContainerVersion")
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
     testImplementation("org.slf4j:slf4j-simple:1.7.32")
-    testImplementation("org.testcontainers:postgresql:$testContainerVersion")
 }
 
 java.targetCompatibility = JavaVersion.VERSION_1_8
