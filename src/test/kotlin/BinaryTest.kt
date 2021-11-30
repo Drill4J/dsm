@@ -58,7 +58,7 @@ class BinaryTest : PostgresBased(schema) {
             putBinary(schema, id, binary)
         }
         val actual = transaction {
-            getBinaryAsStream(schema, "id")
+            getBinaryAsStream(schema, id)
         }.readBytes()
 
         assertEquals(binary.contentToString(), actual.contentToString())

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@file:Suppress("CovariantEquals")
+@file:Suppress("CovariantEquals", "BlockingMethodInNonBlockingContext")
 
 package com.epam.dsm
 
@@ -22,10 +22,14 @@ import kotlinx.collections.immutable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
 import kotlinx.serialization.*
+import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.statements.jdbc.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
+import java.io.*
 import java.sql.*
+import java.util.*
 import kotlin.time.*
 
 class StoreClient(val schema: String) {
@@ -171,22 +175,60 @@ class StoreClient(val schema: String) {
 
 suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     try {
-        val (_, idValue) = idPair(any)
         val simpleName = T::class.toTableName()
         prepareTable(schema, simpleName)
         dbContext.set(schema)
-        val json = json.encodeToString(T::class.serializer(), any)
-        val stmt =
-            """
-            |INSERT INTO $schema.${simpleName.toLowerCase()} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', '$json')
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
-        """.trimMargin()
         val measureTime = measureTime {
-            execWrapper(stmt)
+            if (T::class.annotations.any { it is StreamSerialization }) {
+                storeAsStream(any, schema, simpleName)
+            } else {
+                storeAsString(any, schema, simpleName)
+            }
         }
         logger.debug { "Store object took: $measureTime" }
     } finally {
         dbContext.remove()
+    }
+}
+
+inline fun <reified T : Any> Transaction.storeAsString(
+    any: T,
+    schema: String,
+    simpleName: String,
+) {
+    val (_, idValue) = idPair(any)
+    val json = json.encodeToString(T::class.serializer(), any)
+    val stmt =
+        """
+            |INSERT INTO $schema.${simpleName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', '$json')
+            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+        """.trimMargin()
+    execWrapper(stmt)
+}
+
+inline fun <reified T : Any> Transaction.storeAsStream(
+    any: T,
+    schema: String,
+    simpleName: String,
+) {
+    val (_, idValue) = idPair(any)
+    val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
+    try {
+        file.outputStream().use {
+            json.encodeToStream(T::class.serializer(), any, it)
+        }
+        val stmt =
+            """
+            |INSERT INTO $schema.${simpleName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
+            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+        """.trimMargin()
+        InputStreamReader(file.inputStream()).use {
+            val prepareStatement = connection.prepareStatement(stmt, false) as JdbcPreparedStatementImpl
+            prepareStatement.statement.setCharacterStream(1, it)
+            prepareStatement.executeUpdate()
+        }
+    } finally {
+        file.delete()
     }
 }
 
