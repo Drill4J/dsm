@@ -208,6 +208,7 @@ import mu.*
 import org.jetbrains.exposed.sql.*
 import java.io.*
 import java.sql.*
+import java.util.*
 import kotlin.reflect.*
 
 val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
@@ -219,7 +220,7 @@ val dbContext = InheritableThreadLocal<String>()
 fun KClass<*>.toTableName(): String {
     return camelRegex.replace(this.simpleName!!) {
         "_${it.value}"
-    }.toLowerCase()
+    }.lowercase(Locale.getDefault())
 }
 
 fun Transaction.createJsonTable(schema: String, simpleName: String) {

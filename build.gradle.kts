@@ -15,8 +15,8 @@ apply(from = "$scriptUrl/git-version.gradle.kts")
 
 repositories {
     mavenLocal()
+    mavenCentral()
     apply(from = "$scriptUrl/maven-repo.gradle.kts")
-    jcenter()
 }
 
 val coroutinesVersion: String by project
@@ -39,7 +39,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
-    implementation ("io.github.microutils:kotlin-logging-jvm:$loggerVersion")
+    implementation("io.github.microutils:kotlin-logging-jvm:$loggerVersion")
 
     api("org.postgresql:postgresql:$postgresSqlVersion")
     implementation("com.github.luben:zstd-jni:$zstVersion")
@@ -51,7 +51,16 @@ dependencies {
     testImplementation("org.slf4j:slf4j-simple:1.7.32")
 }
 
-java.targetCompatibility = JavaVersion.VERSION_1_8
+allprojects {
+    tasks.withType<org.gradle.jvm.tasks.Jar> {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
 
 kotlin {
     target {
@@ -64,7 +73,7 @@ kotlin {
         "kotlinx.serialization.ExperimentalSerializationApi",
         "kotlin.time.ExperimentalTime"
     ).let { annotations ->
-        sourceSets.all { annotations.forEach(languageSettings::useExperimentalAnnotation) }
+        sourceSets.all { annotations.forEach(languageSettings::optIn) }
     }
 }
 

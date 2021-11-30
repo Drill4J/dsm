@@ -180,3 +180,20 @@ data class ObjectWithTwoAnnotation(
     @Id val id: CompositeId,
     val size: Int,
 )
+
+@Serializable
+data class LargeObject(
+    @Id
+    val id: String,
+    val list: List<String>,
+    val map: Map<String, String>,
+)
+
+@StreamSerialization
+@Serializable
+data class LargeObjectWithStreamSerializationAnnotation(
+    @Id
+    val id: String,
+    val list: List<String>,
+    val map: Map<String, String>,
+)

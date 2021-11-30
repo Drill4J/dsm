@@ -19,19 +19,29 @@ import com.epam.dsm.*
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.openjdk.jmh.annotations.*
-import java.io.*
 import java.util.concurrent.*
+import kotlin.test.*
 
 @State(Scope.Benchmark)
-@Fork
+@Fork(1)
 @Warmup(iterations = 3)
 @Measurement(iterations = 5, timeUnit = TimeUnit.MILLISECONDS)
-class CompressTest : Configuration() {
+class SaveTest : Configuration() {
 
-    private val filePath = ""
-    private val bytes = File(filePath).readBytes()
     private val schema = "binary_perf_test"
-    private val store = StoreClient(schema)
+    private val client = StoreClient(schema)
+    private val size = 50_000
+    private val largeObject = LargeObject(
+        "id",
+        (1..size).map { "$it".repeat(20) },
+        (1..size).associate { "$it".repeat(20) to "$it".repeat(20) },
+    )
+
+    private val annotatedLargeObject = LargeObjectWithStreamAnnotation(
+        "id",
+        (1..size).map { "$it".repeat(20) },
+        (1..size).associate { "$it".repeat(20) to "$it".repeat(20) },
+    )
 
     @Setup
     fun before() {
@@ -45,22 +55,28 @@ class CompressTest : Configuration() {
     fun after() {
         println("after benchmark...")
         transaction {
-            val result = connection.prepareStatement(
-                "SELECT pg_size_pretty(pg_total_relation_size('$schema.BINARYA'))", false
-            ).executeQuery()
-            result.next()
-            println("Table size ${result.getString(1)}")
-        }
-        transaction {
             exec("DROP SCHEMA $schema CASCADE")
         }
     }
 
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
-    @Threads(1)
-    fun test() = runBlocking {
-        store.store(BinaryClass("${java.util.UUID.randomUUID()}", bytes))
+    @Threads(Threads.MAX)
+    fun saveObjectAsJsonStream() = runBlocking {
+        client.store(annotatedLargeObject)
+        val largeObject = client.findById<LargeObjectWithStreamAnnotation>("id")
+        assertEquals(annotatedLargeObject, largeObject)
     }
-}
 
+
+    @Benchmark
+    @BenchmarkMode(Mode.Throughput)
+    @Threads(Threads.MAX)
+    fun saveObjectAsJsonString(): Unit = runBlocking {
+        client.store(largeObject)
+        val largeObjectFromDB = client.findById<LargeObject>("id")
+        assertEquals(largeObject, largeObjectFromDB)
+    }
+
+
+}

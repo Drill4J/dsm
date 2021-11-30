@@ -21,3 +21,5 @@ import kotlinx.serialization.SerialInfo
 @Target(AnnotationTarget.PROPERTY, AnnotationTarget.CLASS)
 annotation class Id
 
+@Target(AnnotationTarget.CLASS)
+annotation class StreamSerialization

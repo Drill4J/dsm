@@ -4,8 +4,8 @@ import org.jetbrains.kotlin.allopen.gradle.*
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
-    kotlin("plugin.allopen") version "1.4.21"
-    id("org.jetbrains.kotlinx.benchmark") version "0.3.0"
+    kotlin("plugin.allopen")
+    id("org.jetbrains.kotlinx.benchmark")
     id("org.jetbrains.kotlin.plugin.noarg")
 }
 
@@ -22,6 +22,7 @@ val benchmarkVersion: String by rootProject
 val testContainerVersion: String by rootProject
 val coroutinesVersion: String by rootProject
 val serializationVersion: String by rootProject
+val exposedVersion: String by rootProject
 
 noArg {
     annotation("kotlinx.serialization.Serializable")
@@ -30,7 +31,6 @@ noArg {
 repositories {
     mavenLocal()
     mavenCentral()
-    jcenter()
 }
 
 dependencies {
@@ -40,25 +40,34 @@ dependencies {
     testImplementation("org.testcontainers:postgresql:$testContainerVersion")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
+    testImplementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
+    testImplementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
 }
 
 kotlin {
+    target {
+        compilations.all { kotlinOptions.jvmTarget = "${project.java.targetCompatibility}" }
+    }
     sourceSets.main {
         dependencies {
             implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:$benchmarkVersion")
         }
     }
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = "1.8"
+    listOf(
+        "kotlin.Experimental",
+        "kotlinx.serialization.ImplicitReflectionSerializer",
+        "kotlinx.serialization.InternalSerializationApi",
+        "kotlinx.serialization.ExperimentalSerializationApi",
+        "kotlin.time.ExperimentalTime"
+    ).let { annotations ->
+        sourceSets.all { annotations.forEach(languageSettings::optIn) }
     }
 }
 
-tasks.withType<JavaExec>{
-    jvmArgs = listOf("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5015")
+allOpen {
+    annotation("org.openjdk.jmh.annotations.State")
 }
+
 
 tasks {
     test {

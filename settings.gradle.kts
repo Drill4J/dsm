@@ -6,7 +6,7 @@ apply(from = "$scriptUrl/maven-repo.settings.gradle.kts")
 pluginManagement {
     val kotlinVersion: String by settings
     val licenseVersion: String by extra
-    val kotlinNoarg: String by extra
+    val benchmarkVersion: String by extra
     val atomicFuVersion: String by extra
     plugins {
         kotlin("jvm") version kotlinVersion
@@ -14,10 +14,13 @@ pluginManagement {
         kotlin("plugin.allopen") version kotlinVersion
         id("kotlinx-atomicfu") version atomicFuVersion
         id("com.github.hierynomus.license") version licenseVersion
-        id("org.jetbrains.kotlin.plugin.noarg") version kotlinNoarg
+        id("org.jetbrains.kotlin.plugin.noarg") version kotlinVersion
+        id("org.jetbrains.kotlinx.benchmark") version benchmarkVersion
     }
 
     repositories {
+        mavenCentral()
+        gradlePluginPortal()
         maven("https://dl.bintray.com/kotlin/kotlinx")
         maven(url = "https://oss.jfrog.org/artifactory/list/oss-release-local")
     }
