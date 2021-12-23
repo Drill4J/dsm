@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.epam.dsm
+package com.epam.dsm.non_functional
 
+import com.epam.dsm.*
+import com.epam.dsm.common.*
 import kotlinx.coroutines.*
 import kotlin.test.*
 

@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.epam.dsm
+package com.epam.dsm.serializer
 
-import com.epam.dsm.serializer.*
+import com.epam.dsm.*
+import com.epam.dsm.common.*
 import com.epam.dsm.test.*
 import com.epam.dsm.util.*
 import kotlinx.coroutines.*
