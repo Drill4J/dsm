@@ -17,9 +17,10 @@
 
 package com.epam.dsm
 
+import com.epam.dsm.common.*
+import com.epam.dsm.find.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
-import org.junit.jupiter.api.*
 import kotlin.test.*
 import kotlin.test.Test
 
@@ -38,9 +39,9 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertEquals(1, all.count())
         val foundById = storeClient.findById<CompositeData>(CompositeId("one", 1))
         assertEquals(data, foundById)
-        val foundByExprWithId = storeClient.findBy<CompositeData> { CompositeData::id eq id }
+        val foundByExprWithId = storeClient.findBy<CompositeData> { CompositeData::id eq id }.get()
         assertEquals(data, foundByExprWithId.first())
-        val foundByExprWithData = storeClient.findBy<CompositeData> { CompositeData::data eq "data" }
+        val foundByExprWithData = storeClient.findBy<CompositeData> { CompositeData::data eq "data" }.get()
         assertEquals(data, foundByExprWithData.first())
     }
 
@@ -88,7 +89,7 @@ class DsmCoreTest : PostgresBased("plugin") {
 
     @Test
     fun `should retrieve empty collection when object does not added`() = runBlocking {
-        val simpleObject = storeClient.findBy<SimpleObject> { SimpleObject::id eq "1" }
+        val simpleObject = storeClient.findBy<SimpleObject> { SimpleObject::id eq "1" }.get()
         assertTrue(simpleObject.isEmpty())
     }
 
@@ -119,25 +120,6 @@ class DsmCoreTest : PostgresBased("plugin") {
         storeClient.store(withDefaults)
         val all = storeClient.getAll<ComplexListNesting>()
         assertEquals(listOf(withDefaults), all)
-    }
-
-    @Test
-    fun `should find object with complex expressions`() = runBlocking {
-        storeClient.store(complexObject)
-        storeClient.store(complexObject.copy(id = "123", ch = 'w'))
-        val all = storeClient.findBy<ComplexObject> {
-            (ComplexObject::enumExample eq EnumExample.SECOND) and (ComplexObject::id eq "123")
-        }
-        assertTrue(all.isNotEmpty())
-    }
-
-    @Test
-    fun `should delete object with startsWith expression`() = runBlocking {
-        storeClient.store(simpleObject)
-        storeClient.deleteBy<SimpleObject> {
-            (SimpleObject::id.startsWith("i"))
-        }
-        assertTrue(storeClient.getAll<SimpleObject>().isEmpty())
     }
 
     @Test
@@ -296,13 +278,13 @@ class DsmCoreTest : PostgresBased("plugin") {
         val obj = ObjectWithSetField("myId", set)
         storeClient.store(obj)
         assertEquals(1, storeClient.findById<ObjectWithSetField>("myId")?.set?.count())
-        assertEquals("name1", storeClient.findById<ObjectWithSetField>("myId")?.set?.firstOrNull()?.name)
+        assertEquals("name1", storeClient.findById<ObjectWithSetField>("myId")?.set?.firstOrNull()?.nameExample)
         val storedObj = storeClient.findById<ObjectWithSetField>("myId")!!
         storedObj.set.removeAll { it.id == "1" }
         storedObj.set.add(SetPayload("1", "name2"))
         storeClient.store(storedObj)
         assertEquals(1, storeClient.findById<ObjectWithSetField>("myId")?.set?.count())
-        assertEquals("name2", storeClient.findById<ObjectWithSetField>("myId")?.set?.firstOrNull()?.name)
+        assertEquals("name2", storeClient.findById<ObjectWithSetField>("myId")?.set?.firstOrNull()?.nameExample)
     }
 
     @Test

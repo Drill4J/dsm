@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.epam.dsm
+package com.epam.dsm.serializer
 
-import com.epam.dsm.serializer.*
+import com.epam.dsm.*
+import com.epam.dsm.common.*
 import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
@@ -36,7 +37,7 @@ class BitSetTest : PostgresBased("bitset") {
     @Test
     fun shouldStoreBitSetInSeparateTable() = runBlocking {
         val size = 5_000
-        val btst = BitSet(size)
+        val btst = BitSetInit(size)
             .apply {
                 set(8)
                 set(6)
@@ -65,7 +66,7 @@ class BitSetTest : PostgresBased("bitset") {
             storeClient.store(
                 BitsetClass(
                     id,
-                    BitSet(size)
+                    BitSetInit(size)
                         .apply {
                             set(i)
                         }
@@ -73,14 +74,14 @@ class BitSetTest : PostgresBased("bitset") {
             )
         }
 
-        val filledBitSet = BitSet(size).apply {
+        val filledBitSet = BitSetInit(size).apply {
             (0..size).forEach {
                 set(it)
             }
         }
         assertEquals(filledBitSet, bitwise("bit_or"))
 
-        val emptyBitSet = BitSet(size)
+        val emptyBitSet = BitSetInit(size)
         assertEquals(emptyBitSet, bitwise("bit_and"))
         println("finished")
     }
@@ -89,14 +90,14 @@ class BitSetTest : PostgresBased("bitset") {
 
 fun bitwise(name: String) = transaction {
     lateinit var final: BitSet
-    execWrapper("select ${name}(Cast(JSON_BODY->>'btst' as BIT VARYING(10000000))) FROM bitset.bitset_class") {
+    execWrapper("select ${name}(Cast($JSON_COLUMN->>'btst' as BIT VARYING(10000000))) FROM bitset.bitset_class") {
         if (it.next())
             final = it.getString(1).toBitSet()
     }
     final
 }
 
-fun BitSet(nbits: Int): BitSet {
+fun BitSetInit(nbits: Int): BitSet {
     return java.util.BitSet(nbits + 1)
         .apply { set(nbits) } //bitsetMagic
 }

@@ -15,6 +15,8 @@
  */
 package com.epam.dsm
 
+import com.epam.dsm.common.*
+import com.epam.dsm.serializer.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import org.junit.jupiter.api.*
@@ -76,7 +78,7 @@ class MemoryUsageTest : PostgresBased(schema) {
                 ExecClassData(
                     id = Random.nextLong(100_000_000),
                     className = "foo/Bar",
-                    probes = BitSet(sizeProbes)
+                    probes = BitSetInit(sizeProbes)
                 )
             }
             collection = execClassData

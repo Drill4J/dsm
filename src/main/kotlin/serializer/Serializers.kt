@@ -23,8 +23,11 @@ import kotlinx.serialization.builtins.*
 import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
 import kotlinx.serialization.internal.*
+import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.transactions.*
+import java.io.*
 import java.util.*
+import kotlin.reflect.*
 
 val DSM_FETCH_AND_PUSH_LIMIT = System.getenv("DSM_FETCH_AND_PUSH_LIMIT")?.toIntOrNull() ?: 10_000
 
@@ -57,16 +60,14 @@ object BinarySerializer : KSerializer<ByteArray> {
 /**
  * This serializer stores Collections, in the future Map and ByteArray in a separate table
  * Hashcode of parent object field with annotation @Id is used as the id.
- * @param classLoader is necessary for deserializing the class
  *
  * Custom serialization for BitSet when storing: Bitsets are serialized into a string of 0's and 1's.
  */
 class DsmSerializer<T>(
     private val serializer: KSerializer<T>,
     val classLoader: ClassLoader,
-    val parentId: Int? = null
+    val parentId: String? = null,
 ) : KSerializer<T> by serializer {
-
     override fun serialize(encoder: Encoder, value: T) {
         if (serializer.isBitSet()) {
             encoder.encodeSerializableValue(String.serializer(), (value as BitSet).stringRepresentation())
@@ -92,14 +93,14 @@ class DsmSerializer<T>(
         }
 
         inner class DsmCompositeEncoder(
-            private val compositeEncoder: CompositeEncoder
+            private val compositeEncoder: CompositeEncoder,
         ) : CompositeEncoder by compositeEncoder {
 
             override fun <T> encodeSerializableElement(
                 descriptor: SerialDescriptor,
                 index: Int,
                 serializer: SerializationStrategy<T>,
-                value: T
+                value: T,
             ) {
                 when (value) {
                     is Map<*, *>, is ByteArray, is Enum<*> -> {
@@ -110,10 +111,9 @@ class DsmSerializer<T>(
                     is Collection<*> -> {
                         val elementDescriptor = serializer.descriptor.getElementDescriptor(0)
                         if (!value.isEmpty() && elementDescriptor.kind !is PrimitiveKind) {
-                            val clazz = classLoader.loadClass(elementDescriptor.serialName).kotlin
+                            val clazz = getClass(elementDescriptor, classLoader)
 
-                            @Suppress("UNCHECKED_CAST")
-                            val elementSerializer = clazz.dsmSerializer(classLoader, parentId) as KSerializer<Any>
+                            val elementSerializer = clazz.dsmSerializer(parentId, classLoader)
                             storeCollection(value.filterNotNull(), parentId, clazz, elementSerializer)
                             compositeEncoder.encodeSerializableElement(
                                 descriptor,
@@ -144,7 +144,7 @@ class DsmSerializer<T>(
                 descriptor: SerialDescriptor,
                 index: Int,
                 deserializer: DeserializationStrategy<T>,
-                previousValue: T?
+                previousValue: T?,
             ): T {
                 return when (deserializer) {
                     ByteArraySerializer(), is MapLikeSerializer<*, *, *, *> -> {
@@ -153,10 +153,9 @@ class DsmSerializer<T>(
                     is AbstractCollectionSerializer<*, *, *> -> {
                         val elementDescriptor = deserializer.descriptor.getElementDescriptor(0)
                         if (elementDescriptor.kind !is PrimitiveKind) {
-                            val elementClass = classLoader.loadClass(elementDescriptor.serialName).kotlin
+                            val elementClass = getClass(elementDescriptor, classLoader)
 
-                            @Suppress("UNCHECKED_CAST")
-                            val kSerializer = elementClass.dsmSerializer(classLoader) as KSerializer<Any>
+                            val kSerializer = elementClass.dsmSerializer(classLoader = classLoader)
                             val ids = decoder.decodeSerializableValue(ListSerializer(String.serializer()))
                             val list = findByIds(ids, elementClass, kSerializer)
                             unchecked(list.parseCollection(deserializer))
@@ -174,6 +173,14 @@ class DsmSerializer<T>(
             }
         }
     }
+
+    private fun getClass(elementDescriptor: SerialDescriptor, classLoader: ClassLoader): KClass<Any> {
+        @Suppress("UNCHECKED_CAST")
+        return classLoader.loadClass(elementDescriptor.serialName).kotlin as KClass<Any>
+    }
+
+    //todo rmeove
+    private fun curClassLoader() = Thread.currentThread().contextClassLoader
 }
 
 private fun Iterable<Any>.parseCollection(
@@ -187,3 +194,17 @@ private fun Iterable<Any>.parseCollection(
         }
     } ?: this
 }
+
+inline fun <reified T : Any> dsmDecode(inputStream: InputStream, classLoader: ClassLoader): T = json.decodeFromStream(
+    T::class.dsmSerializer(classLoader = classLoader),
+    inputStream
+)
+
+inline fun <reified T : Any> dsmDecode(inputJson: String, classLoader: ClassLoader): T =
+    json.decodeFromString(
+        T::class.dsmSerializer(classLoader = classLoader),
+        inputJson
+    )
+
+inline fun <reified T : Any> classLoader(): ClassLoader = T::class.java.classLoader!!
+

@@ -17,6 +17,7 @@
 
 package com.epam.dsm
 
+import com.epam.dsm.common.*
 import com.epam.dsm.test.*
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.exceptions.*

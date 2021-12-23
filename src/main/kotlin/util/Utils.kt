@@ -13,34 +13,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.epam.dsm
+package com.epam.dsm.util
 
+import com.epam.dsm.*
 import com.epam.dsm.serializer.*
 import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.internal.*
 import kotlinx.serialization.json.*
 import org.postgresql.util.*
 import java.io.*
 import java.util.*
-import java.util.stream.*
 import kotlin.math.*
 import kotlin.reflect.*
 import kotlin.reflect.full.*
 
-
 val json = Json {
     allowStructuredMapKeys = true
+    coerceInputValues = true
+    encodeDefaults = true
 }
 
-inline fun <reified T : Any> T.id(): Int {
-    val idName = idName(T::class.serializer().descriptor)
-    val propertyWithId = T::class.memberProperties.find { it.name == idName }
-    return propertyWithId?.getter?.invoke(this)?.hashCode() ?: throw RuntimeException("Property with @Id doesn't found")
+inline fun <reified T : Any> T.id(): String {
+    val idNames = idNames(T::class.serializer().descriptor)
+    val propertiesWithId = T::class.memberProperties.filter { idNames.contains(it.name) }
+    val uniqueId = propertiesWithId.map {
+        it.getter.invoke(this)?.hashCode()
+    }.fold("") { acc, hashCode ->
+        acc + hashCode.toString()
+    }
+    if (uniqueId.isEmpty()) {
+        throw RuntimeException("Property with @Id doesn't found")
+    }
+    return uniqueId
 }
 
-fun idName(desc: SerialDescriptor): String? = (0 until desc.elementsCount).firstOrNull { index ->
+fun idNames(desc: SerialDescriptor) = (0 until desc.elementsCount).filter { index ->
     desc.getElementAnnotations(index).any { it is Id }
-}?.let { idIndex -> desc.getElementName(idIndex) }
+}.map { idIndex -> desc.getElementName(idIndex) }
 
 fun Any.encodeId(): String = when (this) {
     is String -> this
@@ -48,10 +58,17 @@ fun Any.encodeId(): String = when (this) {
     else -> json.encodeToString(unchecked(this::class.serializer()), this)
 }
 
-fun <T : Any> KClass<T>.dsmSerializer(
-    classLoader: ClassLoader,
-    parentId: Int? = null,
-): KSerializer<T> = DsmSerializer(this.serializer(), classLoader, parentId)
+inline fun <reified T : Any> KClass<T>.dsmSerializer(
+    parentId: String? = null,
+    classLoader: ClassLoader
+): KSerializer<T> {
+    val curSerializer = this.serializer()
+    val serializer = if (curSerializer is AbstractPolymorphicSerializer<*>) {
+        json.serializersModule.serializer()
+    } else curSerializer
+    return DsmSerializer(serializer, classLoader, parentId)
+}
+
 
 @Suppress("UNCHECKED_CAST")
 fun <T> unchecked(any: Any) = any as T
@@ -74,6 +91,8 @@ fun readerToString(value: Reader, maxLength: Int): String? {
     }
 }
 
-fun elementId(index: Int, parentId: Int?) = "$parentId$index"
+fun elementId(index: Int, parentId: String?) = "$parentId$index"
 
 fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
+
+fun String.toQuotes(): String = "'$this'"

@@ -17,6 +17,7 @@
 
 package com.epam.dsm
 
+import com.epam.dsm.find.*
 import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import com.zaxxer.hikari.pool.*
@@ -24,21 +25,19 @@ import com.zaxxer.hikari.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
 import kotlinx.serialization.*
-import kotlinx.serialization.builtins.*
-import kotlinx.serialization.encoding.*
-import kotlinx.serialization.internal.*
 import kotlinx.serialization.json.*
-import org.jetbrains.exposed.dao.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.jdbc.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
-import org.postgresql.util.*
 import java.io.*
 import java.util.*
-import kotlin.math.*
 import kotlin.reflect.*
 import kotlin.time.*
+
+const val JSON_COLUMN = "JSON_BODY"
+const val ID_COLUMN = "ID"
+const val PARENT_ID_COLUMN = "PARENT_ID"
 
 /**
  * Can be init by:
@@ -93,9 +92,8 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
             }
         }
 
-
     suspend inline fun <reified T : Any> findBy(noinline expression: Expr<T>.() -> Unit) =
-        withContext<Collection<T>>(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
                 findBy(expression)
             }
@@ -116,7 +114,6 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
             }
         }
 
-
     suspend inline fun <reified T : Any> deleteAll(): Unit =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
@@ -129,55 +126,27 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
 suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
     val finalData = mutableListOf<T>()
     val tableName = T::class.createTableIfNotExists(connection.schema)
-    val classLoader = T::class.java.classLoader
-    execWrapper("select JSON_BODY FROM $tableName") { rs ->
+    val classLoader = classLoader<T>()
+    execWrapper("select $JSON_COLUMN FROM $tableName") { rs ->
         while (rs.next()) {
-            finalData.add(
-                json.decodeFromStream(
-                    T::class.dsmSerializer(classLoader),
-                    rs.getBinaryStream(1)
-                )
-            )
+            finalData.add(dsmDecode(rs.getBinaryStream(1), classLoader))
         }
     }
     return finalData
 }
 
-suspend inline fun <reified T : Any> Transaction.findBy(
+inline fun <reified T : Any> Transaction.findBy(
     expression: Expr<T>.() -> Unit,
-) = run {
-    val tableName = T::class.createTableIfNotExists(connection.schema)
-    val finalData = mutableListOf<T>()
-    val classLoader = T::class.java.classLoader
-    val sqlStatement = """
-            |SELECT JSON_BODY FROM $tableName
-            |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
-    """.trimMargin()
-    execWrapper(sqlStatement) { rs ->
-        while (rs.next()) {
-            finalData.add(
-                json.decodeFromStream(
-                    T::class.dsmSerializer(classLoader),
-                    rs.getBinaryStream(1)
-                )
-            )
-        }
-    }
-    finalData
-}
+): SearchQuery<T> = SearchQuery(buildSqlCondition(expression), db, classLoader<T>())
 
 suspend inline fun <reified T : Any> Transaction.findById(
     id: Any,
 ): T? = run {
     var entity: T? = null
     val tableName = T::class.createTableIfNotExists(connection.schema)
-    val classLoader = T::class.java.classLoader
-    execWrapper("select JSON_BODY FROM $tableName WHERE ID='${id.hashCode()}'") { rs ->
+    execWrapper("select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") { rs ->
         if (rs.next()) {
-            entity = json.decodeFromStream(
-                T::class.dsmSerializer(classLoader),
-                rs.getBinaryStream(1)
-            )
+            entity = dsmDecode(rs.getBinaryStream(1), classLoader<T>())
         }
     }
     entity
@@ -186,7 +155,7 @@ suspend inline fun <reified T : Any> Transaction.findById(
 inline fun <reified T : Any> findByIds(
     ids: Collection<T>,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>
+    elementSerializer: KSerializer<T>,
 ): Iterable<T> = transaction {
     val entities: MutableList<T> = mutableListOf()
     if (ids.isEmpty()) return@transaction entities
@@ -195,7 +164,7 @@ inline fun <reified T : Any> findByIds(
         elementClass.createTableIfNotExists(schema)
     }
     val idString = ids.joinToString { "'$it'" }
-    val stm = "select JSON_BODY FROM $tableName WHERE ID in ($idString)"
+    val stm = "select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).createStatement()
     statement.fetchSize = DSM_FETCH_AND_PUSH_LIMIT
     statement.executeQuery(stm).let { rs ->
@@ -211,7 +180,7 @@ suspend inline fun <reified T : Any> Transaction.deleteById(
     id: Any,
 ) {
     val tableName = T::class.createTableIfNotExists(connection.schema)
-    execWrapper("DELETE FROM $tableName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
+    execWrapper("DELETE FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") //todo use parameters to detect type
 }
 
 suspend inline fun <reified T : Any> Transaction.deleteBy(
@@ -221,7 +190,7 @@ suspend inline fun <reified T : Any> Transaction.deleteBy(
     execWrapper(
         """
                     |DELETE FROM $tableName
-                    |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
+                    |WHERE ${buildSqlCondition(expression)}
                     """.trimMargin()
     )
 }
@@ -251,22 +220,21 @@ inline fun <reified T : Any> Transaction.storeAsString(
     tableName: String,
 ) {
     val id = any.id()
-    val classLoader = T::class.java.classLoader
     val stmt =
         """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('$id', CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $JSON_COLUMN) VALUES ('$id', CAST(? as jsonb))
+            |ON CONFLICT ($ID_COLUMN) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
-    stm[1] = json.encodeToString(T::class.dsmSerializer(classLoader, id), any)
+    stm[1] = json.encodeToString(T::class.dsmSerializer(id, classLoader<T>()), any)
     stm.executeUpdate()
 }
 
 inline fun <reified T : Any> storeCollection(
     collection: Iterable<T>,
-    parentId: Int?,
+    parentId: String?,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>
+    elementSerializer: KSerializer<T>,
 ): Unit = transaction {
     val schema = connection.schema
     val tableName = runBlocking {
@@ -287,16 +255,11 @@ inline fun <reified T : Any> storeCollection(
                 val statement = (connection.connection as HikariProxyConnection).createStatement()
                 sizes.forEachIndexed { index, size ->
                     val value = readerToString(it, size)
-                    val stmt =
-                        """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${
-                            elementId(
-                                index,
-                                parentId
-                            )
-                        }', '$value')
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
-        """.trimMargin()
+                    val stmt = """
+                        |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (
+                        |       '${elementId(index, parentId)}', '$parentId', '$value')
+                        |ON CONFLICT ($ID_COLUMN) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
+                    """.trimMargin()
                     statement.addBatch(stmt)
                     if (index % DSM_FETCH_AND_PUSH_LIMIT == 0) {
                         statement.executeBatch()
@@ -317,14 +280,13 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     val id = any.id()
     val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
     try {
-        val classLoader = T::class.java.classLoader
         file.outputStream().use {
-            json.encodeToStream(T::class.dsmSerializer(classLoader, id), any, it)
+            json.encodeToStream(T::class.dsmSerializer(id, classLoader<T>()), any, it)
         }
         val stmt =
             """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('$id', CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $JSON_COLUMN) VALUES ('$id', CAST(? as jsonb))
+            |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
         InputStreamReader(file.inputStream()).use {
             val prepareStatement = connection.prepareStatement(stmt, false) as JdbcPreparedStatementImpl
@@ -348,11 +310,12 @@ suspend fun KClass<*>.createTableIfNotExists(
     createTable: Transaction.(String) -> Unit = { tableName ->
         createJsonTable(tableName)
     },
-): String {
-    val tableName = camelRegex.replace(this.simpleName!!) {
+): String = createTableIfNotExists(schema, tableName(), createTable)
+
+fun KClass<*>.tableName(): String = run {
+    camelRegex.replace(this.simpleName!!) {
         "_${it.value}"
     }.lowercase(Locale.getDefault())
-    return createTableIfNotExists(schema, tableName, createTable)
 }
 
 suspend inline fun createTableIfNotExists(
