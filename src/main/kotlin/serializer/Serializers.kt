@@ -23,8 +23,11 @@ import kotlinx.serialization.builtins.*
 import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
 import kotlinx.serialization.internal.*
+import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.transactions.*
+import java.io.*
 import java.util.*
+import kotlin.reflect.*
 
 val DSM_PUSH_LIMIT = System.getenv("DSM_PUSH_LIMIT")?.toIntOrNull() ?: 3_000
 val DSM_FETCH_LIMIT = System.getenv("DSM_FETCH_LIMIT")?.toIntOrNull() ?: 10_000
@@ -58,7 +61,6 @@ object BinarySerializer : KSerializer<ByteArray> {
 /**
  * This serializer stores Collections, in the future Map and ByteArray in a separate table
  * Hashcode of parent object field with annotation @Id is used as the id.
- * @param classLoader is necessary for deserializing the class
  *
  * Custom serialization for BitSet when storing: Bitsets are serialized into a string of 0's and 1's.
  */
@@ -68,7 +70,6 @@ class DsmSerializer<T>(
     val parentId: Int? = null,
     var parentIndex: Int? = null,
 ) : KSerializer<T> by serializer {
-
     override fun serialize(encoder: Encoder, value: T) {
         if (serializer.isBitSet()) {
             encoder.encodeSerializableValue(String.serializer(), (value as BitSet).stringRepresentation())
@@ -228,6 +229,14 @@ class DsmSerializer<T>(
             }
         }
     }
+
+    private fun getClass(elementDescriptor: SerialDescriptor, classLoader: ClassLoader): KClass<Any> {
+        @Suppress("UNCHECKED_CAST")
+        return classLoader.loadClass(elementDescriptor.serialName).kotlin as KClass<Any>
+    }
+
+    //todo rmeove
+    private fun curClassLoader() = Thread.currentThread().contextClassLoader
 }
 
 private fun Iterable<Any>.parseCollection(
@@ -241,3 +250,17 @@ private fun Iterable<Any>.parseCollection(
         }
     } ?: this
 }
+
+inline fun <reified T : Any> dsmDecode(inputStream: InputStream, classLoader: ClassLoader): T = json.decodeFromStream(
+    T::class.dsmSerializer(classLoader = classLoader),
+    inputStream
+)
+
+inline fun <reified T : Any> dsmDecode(inputJson: String, classLoader: ClassLoader): T =
+    json.decodeFromString(
+        T::class.dsmSerializer(classLoader = classLoader),
+        inputJson
+    )
+
+inline fun <reified T : Any> classLoader(): ClassLoader = T::class.java.classLoader!!
+

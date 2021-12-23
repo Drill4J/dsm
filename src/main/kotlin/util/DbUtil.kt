@@ -33,14 +33,20 @@ val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 val logger = KotlinLogging.logger {}
 
 fun Transaction.createJsonTable(tableName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, JSON_BODY jsonb);")
+    execWrapper("""
+        CREATE TABLE IF NOT EXISTS $tableName (
+            $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key, 
+            $PARENT_ID_COLUMN varchar(256), 
+            $JSON_COLUMN jsonb
+        );
+        """)
     commit()
 }
 
 fun Transaction.createBinaryTable() {
     execWrapper(
         """
-             CREATE TABLE IF NOT EXISTS BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea);
+             CREATE TABLE IF NOT EXISTS BINARYA ($ID_COLUMN varchar(256) not null constraint binarya_pk primary key, binarya bytea);
              ALTER TABLE BINARYA ALTER COLUMN binarya SET STORAGE EXTERNAL; 
              """.trimIndent()
     )
@@ -92,7 +98,7 @@ fun Transaction.getBinary(id: String): ByteArray {
         }
     }
     val prepareStatement = connection.prepareStatement(
-        "SELECT BINARYA FROM BINARYA WHERE id = '$id'",
+        "SELECT BINARYA FROM BINARYA WHERE $ID_COLUMN = ${id.toQuotes()}",
         false
     )
     val executeQuery = prepareStatement.executeQuery()
@@ -126,7 +132,7 @@ fun getBinaryCollection(id: String): Collection<ByteArray> = transaction {
 fun Transaction.getBinaryAsStream(id: String): InputStream {
     val prepareStatement = connection.prepareStatement(
         "SELECT BINARYA FROM BINARYA " +
-                "WHERE id = '$id'", false
+                "WHERE $ID_COLUMN = ${id.toQuotes()}", false
     )
     val executeQuery = prepareStatement.executeQuery()
     return if (executeQuery.next())
