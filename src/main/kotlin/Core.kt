@@ -84,6 +84,51 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
             }
         }
 
+    /**
+     * Using for find elements where an object stores a list by 'jsonb_to_recordset' https://www.postgresql.org/docs/14/functions-json.html
+     * object T - the object which has a list
+     *
+     * @param whatReturn part of sql after 'select'. E - element of the list what return as result. Example: "to_jsonb(items)"
+     * @param listWay part of sql after jsonb_to_recordset. Example: "'list'"; "'data' -> 'testsOverview'"
+     * @param listDescription part of sql which describe the list of record. Example: "items("id" text)"
+     * @param where part of sql with key 'where'. Example: "where name = 'test3'"
+     */
+    suspend inline fun <reified T : Any, reified E : Any> findInList(
+        whatReturn: String,
+        listWay: String,
+        listDescription: String,
+        where: String = "",
+    ) = withContext(Dispatchers.IO) {
+        executeInAsyncTransaction {
+            try {
+                val resultList = mutableListOf<E>()
+                val tableName = T::class.createTableIfNotExists(connection.schema)
+                execWrapper(
+                    """
+                            select $whatReturn 
+                            FROM $tableName,
+                                jsonb_to_recordset($tableName.json_body -> $listWay) as $listDescription
+                            $where
+                        """.trimIndent()
+                ) {
+                    while (it.next()) {
+                        it.getString(1)?.let { jsonBody ->
+                            resultList.add(
+                                json.decodeFromString(
+                                    E::class.serializer(),
+                                    jsonBody
+                                )
+                            )
+                        }
+                    }
+                }
+                resultList
+            } catch (e: Exception) {
+                logger.warn { "cannot find cause exc: $e" }
+                emptyList()
+            }
+        }
+    }
 
     suspend inline fun <reified T : Any> findBy(noinline expression: Expr<T>.() -> Unit) =
         withContext<Collection<T>>(Dispatchers.IO) {

@@ -15,8 +15,7 @@
  */
 package com.epam.dsm
 
-import kotlinx.serialization.SerialInfo
-import kotlinx.serialization.Serializable
+import kotlinx.serialization.*
 
 @SerialInfo
 @Target(AnnotationTarget.PROPERTY, AnnotationTarget.CLASS)
@@ -83,6 +82,13 @@ data class PayloadWithList(
     val list: List<SetPayload> = emptyList(),
 )
 
+@Serializable
+data class PayloadWithIdList(
+    @Id val id: String,
+    val num: Int = 0,
+    val str: String = "",
+    val list: List<SetPayload> = emptyList(),
+)
 
 @Serializable
 data class ObjectWithSetField(
@@ -117,6 +123,7 @@ data class AllDefaultPayload(
 data class SetPayload(
     val id: String,
     val name: String,
+    val subObject: SubObject? = null,
 )
 
 @Serializable
