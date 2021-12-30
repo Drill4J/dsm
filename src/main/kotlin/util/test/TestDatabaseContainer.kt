@@ -68,6 +68,7 @@ class TestDatabaseContainer {
                     exec("DROP SCHEMA IF EXISTS $it CASCADE")
                 }
             }
+            createdTables.clear()
         }
     }
 }

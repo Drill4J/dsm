@@ -17,8 +17,8 @@
 
 package com.epam.dsm
 
-import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.Serializable
+import kotlinx.coroutines.*
+import kotlinx.serialization.*
 import org.junit.jupiter.api.*
 import kotlin.test.*
 import kotlin.test.Test
@@ -264,20 +264,19 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertTrue(agentStore.getAll<ComplexObject>().isEmpty())
     }
 
-    @Disabled
     @Test
     fun `should be transactional when delete smth twice`() = runBlocking {
         agentStore.store(complexObject.copy(id = "1"))
         agentStore.store(complexObject.copy(id = "2"))
         try {
-            @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-//                agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "1" }
-//                deleteBy<ComplexObject> { ComplexObject::id eq "1" }
+                deleteBy<ComplexObject>(agentStore.schema) { ComplexObject::id eq "1" }
                 fail("test")
-                agentStore.deleteBy<ComplexObject> { ComplexObject::id eq "2" }
+                @Suppress("UNREACHABLE_CODE")
+                deleteBy<ComplexObject>(agentStore.schema) { ComplexObject::id eq "2" }
             }
         } catch (ignored: Throwable) {
+            println(ignored)
         }
         assertEquals(2, agentStore.getAll<ComplexObject>().size)
     }
