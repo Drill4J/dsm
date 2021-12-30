@@ -68,7 +68,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
     }
 
     @Test
-    fun `should parallel store in one transaction`() = runBlocking {
+    fun `should parallel store in one transaction with 1 storing`() = runBlocking {
         val list = mutableListOf<Job>()
         val times = 2
         repeat(times) {
@@ -83,6 +83,25 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
         }
         joinAll(*list.toTypedArray())
         assertEquals(times, agentStore.getAll<SimpleObject>().size)
+    }
+
+    @Test
+    fun `should parallel store in one transaction with 2 storing`() = runBlocking {
+        val list = mutableListOf<Job>()
+        val times = 4
+        repeat(times) {
+            val job = launch(Dispatchers.Default) {
+                println("storing $it...")
+                agentStore.executeInAsyncTransaction {
+                    store(simpleObject.copy(id = "agentA_$it"), agentStore.schema)
+                    store(simpleObject.copy(id = "agentB_$it"), agentStore.schema)
+                }
+                println("finished $it")
+            }
+            list.add(job)
+        }
+        joinAll(*list.toTypedArray())
+        assertEquals(times * 2, agentStore.getAll<SimpleObject>().size)
     }
 
 }

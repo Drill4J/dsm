@@ -18,7 +18,6 @@
 package com.epam.dsm
 
 import com.epam.dsm.util.*
-import kotlinx.collections.immutable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
 import kotlinx.serialization.*
@@ -54,55 +53,13 @@ class StoreClient(val schema: String) {
 
     suspend inline fun <reified T : Any> getAll(): Collection<T> =
         executeInAsyncTransaction {
-            val finalData = mutableListOf<T>()
-            try {
-                dbContext.set(schema)
-                val simpleName = T::class.toTableName()
-
-                execWrapper("select JSON_BODY FROM $schema.$simpleName") { rs ->
-                    while (rs.next()) {
-                        val jsonBody = rs.getString(1)
-                        finalData.add(
-                            json.decodeFromString(
-                                T::class.serializer(),
-                                jsonBody
-                            )
-                        )
-                    }
-                }
-
-
-            } catch (ex: Exception) {
-                //todo?
-            } finally {
-                dbContext.remove()
-            }
-            finalData
+            getAll(schema)
         }
 
     suspend inline fun <reified T : Any> findById(id: Any): T? =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                try {
-                    dbContext.set(schema)
-                    var rs: T? = null
-                    val simpleName = T::class.toTableName()
-                    execWrapper("select JSON_BODY FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") {
-                        if (it.next()) {
-                            rs = json.decodeFromString(
-                                T::class.serializer(),
-                                it.getString(1)
-                            )
-                            return@execWrapper
-                        }
-                    }
-                    rs
-                } catch (e: Exception) {
-                    //todo
-                    null
-                } finally {
-                    dbContext.remove()
-                }
+                findById(schema, id)
             }
         }
 
@@ -110,41 +67,14 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> findBy(noinline expression: Expr<T>.() -> Unit) =
         withContext<Collection<T>>(Dispatchers.IO) {
             executeInAsyncTransaction {
-                try {
-                    dbContext.set(schema)
-                    val simpleName = T::class.toTableName()
-                    val finalData = mutableListOf<T>()
-                    val transform: (ResultSet) -> Unit = { rs ->
-                        while (rs.next()) {
-                            val jsonBody = rs.getString(1)
-                            finalData.add(
-                                json.decodeFromString(
-                                    T::class.serializer(),
-                                    jsonBody
-                                )
-                            )
-                        }
-                    }
-                    val sqlStatement = """
-                                   |select JSON_BODY FROM $schema.$simpleName
-                                   |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
-                               """.trimMargin()
-                    execWrapper(sqlStatement, transform = transform)
-                    finalData
-                } catch (e: Exception) {
-                    //todo
-                    emptyList()
-                } finally {
-                    dbContext.remove()
-                }
+                findBy(schema, expression)
             }
         }
 
     suspend inline fun <reified T : Any> deleteById(id: Any): Unit =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                val simpleName = T::class.toTableName()
-                execWrapper("DELETE FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
+                deleteById<T>(schema, id)
             }
         }
 
@@ -152,13 +82,7 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> deleteBy(noinline expression: Expr<T>.() -> Unit) =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                val simpleName = T::class.toTableName()
-                execWrapper(
-                    """
-                    |DELETE FROM $schema.$simpleName
-                    |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
-                    """.trimMargin()
-                )
+                deleteBy(schema, expression)
             }
         }
 
@@ -166,17 +90,132 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> deleteAll(): Unit =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                val simpleName = T::class.toTableName()
-                execWrapper("DELETE FROM $schema.$simpleName")
+                deleteAll<T>(schema)
             }
 
         }
 }
 
+inline fun <reified T : Any> Transaction.getAll(schema: String): MutableList<T> {
+    val finalData = mutableListOf<T>()
+    try {
+        dbContext.set(schema)
+        val simpleName = T::class.toTableName()
+
+        execWrapper("select JSON_BODY FROM $schema.$simpleName") { rs ->
+            while (rs.next()) {
+                val jsonBody = rs.getString(1)
+                finalData.add(
+                    json.decodeFromString(
+                        T::class.serializer(),
+                        jsonBody
+                    )
+                )
+            }
+        }
+    } catch (ex: Exception) {
+        //todo?
+    } finally {
+        dbContext.remove()
+    }
+    return finalData
+}
+
+inline fun <reified T : Any> Transaction.findBy(
+    schema: String,
+    expression: Expr<T>.() -> Unit,
+) = try {
+    dbContext.set(schema)
+    val simpleName = T::class.toTableName()
+    val finalData = mutableListOf<T>()
+    val transform: (ResultSet) -> Unit = { rs ->
+        while (rs.next()) {
+            val jsonBody = rs.getString(1)
+            finalData.add(
+                json.decodeFromString(
+                    T::class.serializer(),
+                    jsonBody
+                )
+            )
+        }
+    }
+    val sqlStatement = """
+                       |select JSON_BODY FROM $schema.$simpleName
+                       |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
+                                   """.trimMargin()
+    execWrapper(sqlStatement, transform = transform)
+    finalData
+} catch (e: Exception) {
+    //todo
+    emptyList()
+} finally {
+    dbContext.remove()
+}
+
+inline fun <reified T : Any> Transaction.findById(
+    schema: String,
+    id: Any
+): T? {
+    try {
+        dbContext.set(schema)
+        var rs: T? = null
+        val simpleName = T::class.toTableName()
+        execWrapper("select JSON_BODY FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") {
+            if (it.next()) {
+                rs = json.decodeFromString(
+                    T::class.serializer(),
+                    it.getString(1)
+                )
+                return@execWrapper
+            }
+        }
+        return rs
+    } catch (e: Exception) {
+        //todo
+        return null
+    } finally {
+        dbContext.remove()
+    }
+}
+
+inline fun <reified T : Any> Transaction.deleteById(
+    schema: String,
+    id: Any
+) {
+    val simpleName = T::class.toTableName()
+    execWrapper("DELETE FROM $schema.$simpleName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
+}
+
+inline fun <reified T : Any> Transaction.deleteBy(
+    schema: String,
+    noinline expression: Expr<T>.() -> Unit
+) {
+    val simpleName = T::class.toTableName()
+    execWrapper(
+        """
+                    |DELETE FROM $schema.$simpleName
+                    |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
+                    """.trimMargin()
+    )
+}
+
+inline fun <reified T : Any> Transaction.deleteAll(
+    schema: String,
+) {
+    val simpleName = T::class.toTableName()
+    execWrapper("DELETE FROM $schema.$simpleName")
+}
+
 suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
     try {
         val simpleName = T::class.toTableName()
-        prepareTable(schema, simpleName)
+        prepareTable(
+            schema = schema,
+            tableName = simpleName,
+            createTable = { sch, tableName ->
+                createJsonTable(sch, tableName)
+            }
+        )
         dbContext.set(schema)
         val measureTime = measureTime {
             if (T::class.annotations.any { it is StreamSerialization }) {
@@ -232,16 +271,17 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     }
 }
 
-val createdTables = persistentSetOf<String>()
+val createdTables = mutableSetOf<String>()
 val mutex = Mutex()
 
-suspend fun prepareTable(schema: String, tableName: String = "") {
+suspend fun prepareTable(schema: String, tableName: String = "", createTable: Transaction.(String, String) -> Unit) {
     val tableKey = "$schema:$tableName"
     if (!createdTables.contains(tableKey)) {
         mutex.withLock {
+            logger.trace { "check after lock $tableKey in $createdTables " }
             if (!createdTables.contains(tableKey)) {
                 transaction {
-                    createJsonTable(schema, tableName)
+                    createTable(schema, tableName)
                 }
                 createdTables.add(tableKey)
             }

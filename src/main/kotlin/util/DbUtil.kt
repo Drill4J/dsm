@@ -217,6 +217,9 @@ val logger = KotlinLogging.logger {}
 
 val dbContext = InheritableThreadLocal<String>()
 
+//TODO EPMDJ-9213 get schema from TransactionManagement or connection
+fun currentSchema() = dbContext.get() ?: throw RuntimeException("Cannot find schema. Lost db context")
+
 fun KClass<*>.toTableName(): String {
     return camelRegex.replace(this.simpleName!!) {
         "_${it.value}"

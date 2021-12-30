@@ -5,7 +5,6 @@ plugins {
     kotlin("plugin.serialization")
     id("com.github.hierynomus.license")
     id("org.jetbrains.kotlin.plugin.noarg")
-    id("kotlinx-atomicfu")
     `maven-publish`
 }
 
