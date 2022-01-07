@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 EPAM Systems
+ * Copyright 2020 - 2022 EPAM Systems
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,13 +73,13 @@ class DsmCoreTest : PostgresBased("plugin") {
     }
 
     @Test
-    fun `should retrieve null if table does not exist`() = runBlocking {
+    fun `should retrieve null when object does not added`() = runBlocking {
         val simpleObject = agentStore.findById<SimpleObject>("12412d")
         assertNull(simpleObject)
     }
 
     @Test
-    fun `should retrieve empty collection if table does not exist`() = runBlocking {
+    fun `should retrieve empty collection when object does not added`() = runBlocking {
         val simpleObject = agentStore.findBy<SimpleObject> { SimpleObject::id eq "1" }
         assertTrue(simpleObject.isEmpty())
     }
