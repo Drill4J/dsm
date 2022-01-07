@@ -93,11 +93,10 @@ val licenseFormatSettings by tasks.registering(com.hierynomus.gradle.license.tas
         include("**/*.kt", "**/*.java", "**/*.groovy")
         exclude("**/.idea")
     }.asFileTree
-    headerURI = URI("https://raw.githubusercontent.com/Drill4J/drill4j/develop/COPYRIGHT")
 }
 
 license {
-    skipExistingHeaders = true
+    headerURI = URI("https://raw.githubusercontent.com/Drill4J/drill4j/develop/COPYRIGHT")
 }
 
 tasks["licenseFormat"].dependsOn(licenseFormatSettings)
