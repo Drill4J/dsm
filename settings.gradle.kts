@@ -19,8 +19,6 @@ pluginManagement {
     repositories {
         mavenCentral()
         gradlePluginPortal()
-        maven("https://dl.bintray.com/kotlin/kotlinx")
-        maven(url = "https://oss.jfrog.org/artifactory/list/oss-release-local")
     }
 }
 

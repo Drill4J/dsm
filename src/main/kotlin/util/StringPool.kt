@@ -36,7 +36,5 @@ fun String.weakIntern(): String {
 
 @Suppress("unused")
 fun logPoolStats() {
-//    logger.info { "Count strings ${weakRefStringPool.size} in pool" }
-
-    //todo mu logger
+    logger.debug { "Count strings ${weakRefStringPool.size} in pool" }
 }

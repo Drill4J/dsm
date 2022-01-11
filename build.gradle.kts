@@ -47,7 +47,7 @@ dependencies {
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
-    testImplementation("org.slf4j:slf4j-simple:1.7.32")
+    testImplementation("ch.qos.logback:logback-classic:1.2.3")
 }
 
 allprojects {
