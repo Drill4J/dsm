@@ -28,16 +28,11 @@ noArg {
     annotation("kotlinx.serialization.Serializable")
 }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
-
 dependencies {
     implementation(project(":"))
+    testImplementation(project(":test-framework"))
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
-    testImplementation("org.testcontainers:postgresql:$testContainerVersion")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     testImplementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
