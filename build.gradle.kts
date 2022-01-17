@@ -10,12 +10,18 @@ plugins {
 
 val scriptUrl: String by extra
 
-apply(from = "$scriptUrl/git-version.gradle.kts")
+allprojects {
+    apply(from = "$scriptUrl/git-version.gradle.kts")
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-    apply(from = "$scriptUrl/maven-repo.gradle.kts")
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        apply(from = "$scriptUrl/maven-repo.gradle.kts")
+    }
+
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+        kotlinOptions.jvmTarget = "1.8"
+    }
 }
 
 val coroutinesVersion: String by project
@@ -43,17 +49,11 @@ dependencies {
     api("org.postgresql:postgresql:$postgresSqlVersion")
     implementation("com.github.luben:zstd-jni:$zstVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:$collectionImmutableVersion")
-    implementation("org.testcontainers:postgresql:$testContainerVersion")
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
-}
-
-allprojects {
-    tasks.withType<org.gradle.jvm.tasks.Jar> {
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    }
+    testImplementation(project(":test-framework"))
 }
 
 java {
@@ -62,9 +62,6 @@ java {
 }
 
 kotlin {
-    target {
-        compilations.all { kotlinOptions.jvmTarget = "${project.java.targetCompatibility}" }
-    }
     listOf(
         "kotlin.Experimental",
         "kotlinx.serialization.ImplicitReflectionSerializer",
@@ -83,6 +80,7 @@ noArg {
 publishing {
     publications {
         create<MavenPublication>("lib") {
+            artifactId = "core"
             from(components["java"])
         }
     }

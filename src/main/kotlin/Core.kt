@@ -275,7 +275,7 @@ suspend inline fun createTableIfNotExists(
     tableName: String = "",
     noinline createTable: Transaction.(String, String) -> Unit,
 ): String {
-    val tableKey = "$schema:$tableName"
+    val tableKey = "$schema.$tableName"
     if (!createdTables.contains(tableKey)) {
         mutex.withLock {
             logger.trace { "check after lock $tableKey in $createdTables " }

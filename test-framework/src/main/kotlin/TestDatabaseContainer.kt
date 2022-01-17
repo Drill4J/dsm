@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.epam.dsm.util.test
+package com.epam.dsm.test
 
 import com.epam.dsm.*
-import com.epam.dsm.serializer.*
 import com.zaxxer.hikari.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.testcontainers.containers.*
@@ -26,7 +25,6 @@ import org.testcontainers.containers.wait.strategy.*
  * This class helps to write tests with DB
  * @see startOnce to create docker container before run tests
  * @see clearData to clear all data from DB after a test
- * TODO move to another module in order to don't store test classes in src.
  */
 class TestDatabaseContainer {
     companion object {
@@ -61,11 +59,11 @@ class TestDatabaseContainer {
             return postgresContainer
         }
 
-        fun clearData(schemas: List<String>) {
+        fun clearData() {
             println("clear database...")
             transaction {
-                schemas.forEach {
-                    exec("DROP SCHEMA IF EXISTS $it CASCADE")
+                createdTables.forEach {
+                    exec("DROP TABLE IF EXISTS $it CASCADE")
                 }
             }
             createdTables.clear()

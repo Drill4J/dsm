@@ -17,7 +17,7 @@ package com.epam.drill
 
 import com.epam.dsm.*
 import com.epam.dsm.serializer.*
-import com.epam.dsm.util.test.*
+import com.epam.dsm.test.*
 import kotlinx.serialization.*
 
 abstract class Configuration {

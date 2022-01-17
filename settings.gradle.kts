@@ -23,3 +23,4 @@ pluginManagement {
 }
 
 include(":benchmarks")
+include(":test-framework")

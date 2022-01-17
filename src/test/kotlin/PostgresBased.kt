@@ -15,7 +15,7 @@
  */
 package com.epam.dsm
 
-import com.epam.dsm.util.test.*
+import com.epam.dsm.test.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.junit.jupiter.api.*
 import kotlin.test.*
@@ -23,17 +23,9 @@ import kotlin.test.*
 abstract class PostgresBased(val schema: String) {
     val agentStore = StoreClient(schema)
 
-    @BeforeTest
-    fun before() {
-        transaction {
-            exec("CREATE SCHEMA IF NOT EXISTS $schema")
-        }
-    }
-
     @AfterTest
     fun after() {
-        TestDatabaseContainer.clearData(listOf(schema))
-        createdTables.clear()
+        TestDatabaseContainer.clearData()
     }
 
     companion object {
