@@ -204,7 +204,7 @@ suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
                 storeAsString(any, schema, tableName)
             }
         }
-        logger.debug { "Store object took: $measureTime" }
+        logger.trace { "Store object took: $measureTime" }
     } finally {
         dbContext.remove()
     }
