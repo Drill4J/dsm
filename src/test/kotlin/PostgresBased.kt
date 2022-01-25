@@ -16,17 +16,12 @@
 package com.epam.dsm
 
 import com.epam.dsm.test.*
-import org.jetbrains.exposed.sql.transactions.*
 import org.junit.jupiter.api.*
 import kotlin.test.*
 
-abstract class PostgresBased(val schema: String) {
-    val agentStore = StoreClient(schema)
+abstract class PostgresBased(schema: String) {
 
-    @AfterTest
-    fun after() {
-        TestDatabaseContainer.clearData()
-    }
+    val agentStore = StoreClient(TestDatabaseContainer.createDataSource(schema = schema))
 
     companion object {
         @BeforeAll
@@ -34,5 +29,10 @@ abstract class PostgresBased(val schema: String) {
         fun postgresSetup() {
             TestDatabaseContainer.startOnce()
         }
+    }
+
+    @AfterTest
+    fun after() {
+        TestDatabaseContainer.clearData()
     }
 }

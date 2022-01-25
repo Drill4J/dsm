@@ -16,13 +16,12 @@
 package com.epam.dsm
 
 import com.epam.dsm.serializer.*
+import com.epam.dsm.test.*
 import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import org.jetbrains.exposed.sql.transactions.*
-import org.junit.jupiter.api.*
 import kotlin.test.*
-import kotlin.test.Test
 
 class BinaryTest : PostgresBased(schema) {
 
@@ -32,8 +31,7 @@ class BinaryTest : PostgresBased(schema) {
 
     @Serializable
     data class BinaryClass(
-        @Id
-        val id: String,
+        @Id val id: String,
         @Suppress("ArrayInDataClass")
         @Serializable(with = BinarySerializer::class)
         val bytes: ByteArray,
@@ -50,18 +48,38 @@ class BinaryTest : PostgresBased(schema) {
     @Test
     fun `should store and retrieve binary data steam`() {
         transaction {
-            createBinaryTable(schema)
+            createBinaryTable()
         }
         val id = "id"
         val binary = byteArrayOf(-48, -94, -47, -117, 32, -48, -65, -48, -72, -48, -76, -48, -66, -47, -128, 33, 33)
         transaction {
-            putBinary(schema, id, binary)
+            putBinary(id, binary)
         }
         val actual = transaction {
-            getBinaryAsStream(schema, id)
+            getBinaryAsStream(id)
         }.readBytes()
 
         assertEquals(binary.contentToString(), actual.contentToString())
+    }
+
+    @Test
+    fun `should store and retrieve binary data in two differ schema`() = runBlocking {
+        val id = "someIDhere"
+        val any = BinaryClass(id, byteArrayOf(1, 0, 1))
+        agentStore.store(any)
+        assertEquals(any.bytes.contentToString(), agentStore.findById<BinaryClass>(id)?.bytes?.contentToString())
+
+        val newDbName = "newdb"
+        val newDb = StoreClient(TestDatabaseContainer.createConfig(schema = newDbName))
+
+        newDb.store(any)
+        assertEquals(any.bytes.contentToString(), agentStore.findById<BinaryClass>(id)?.bytes?.contentToString())
+        assertEquals(any.bytes.contentToString(), newDb.findById<BinaryClass>(id)?.bytes?.contentToString())
+
+        agentStore.store(any.copy(id = "2"))
+
+        assertEquals(2, agentStore.getAll<BinaryClass>().size)
+        assertEquals(1, newDb.getAll<BinaryClass>().size)
     }
 
 }

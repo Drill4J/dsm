@@ -27,37 +27,31 @@ val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
 val logger = KotlinLogging.logger {}
 
-val dbContext = InheritableThreadLocal<String>()
-
-//TODO EPMDJ-9213 get schema from TransactionManagement or connection
-fun currentSchema() = dbContext.get() ?: throw RuntimeException("Cannot find schema. Lost db context")
-
-
-fun Transaction.createJsonTable(schema: String, simpleName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $schema.$simpleName (ID varchar(256) not null constraint ${simpleName}_pk primary key, JSON_BODY jsonb);")
+fun Transaction.createJsonTable(tableName: String) {
+    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, JSON_BODY jsonb);")
     commit()
 }
 
-fun Transaction.createBinaryTable(schema: String) {
+fun Transaction.createBinaryTable() {
     execWrapper(
         """
-             CREATE TABLE IF NOT EXISTS $schema.BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea);
-             ALTER TABLE $schema.BINARYA ALTER COLUMN binarya SET STORAGE EXTERNAL; 
+             CREATE TABLE IF NOT EXISTS BINARYA (ID varchar(256) not null constraint binarya_pk primary key, binarya bytea);
+             ALTER TABLE BINARYA ALTER COLUMN binarya SET STORAGE EXTERNAL; 
              """.trimIndent()
     )
     commit()
 }
 
-fun Transaction.putBinary(schema: String, id: String, value: ByteArray) {
-    val prepareStatement = connection.prepareStatement("INSERT INTO $schema.BINARYA VALUES ('$id', ?)", false)
+fun Transaction.putBinary(id: String, value: ByteArray) {
+    val prepareStatement = connection.prepareStatement("INSERT INTO BINARYA VALUES ('$id', ?)", false)
     prepareStatement[1] = Zstd.compress(value)
     prepareStatement.executeUpdate()
 }
 
-fun Transaction.getBinary(schema: String, id: String): ByteArray {
+fun Transaction.getBinary(id: String): ByteArray {
     val prepareStatement = connection.prepareStatement(
-        "SELECT BINARYA FROM $schema.BINARYA " +
-                "WHERE id = '$id'", false
+        "SELECT BINARYA FROM BINARYA WHERE id = '$id'",
+        false
     )
     val executeQuery = prepareStatement.executeQuery()
     return if (executeQuery.next()) {
@@ -66,9 +60,9 @@ fun Transaction.getBinary(schema: String, id: String): ByteArray {
     } else byteArrayOf() //todo or throw error?
 }
 
-fun Transaction.getBinaryAsStream(schema: String, id: String): InputStream {
+fun Transaction.getBinaryAsStream(id: String): InputStream {
     val prepareStatement = connection.prepareStatement(
-        "SELECT BINARYA FROM $schema.BINARYA " +
+        "SELECT BINARYA FROM BINARYA " +
                 "WHERE id = '$id'", false
     )
     val executeQuery = prepareStatement.executeQuery()
@@ -83,6 +77,6 @@ inline fun Transaction.execWrapper(
     args: Iterable<Pair<IColumnType, Any?>> = emptyList(),
     noinline transform: (ResultSet) -> Unit = {},
 ) {
-    logger.trace { "SQL statement: $sqlStatement" }
+    logger.trace { "SQL statement on schema '${connection.schema}': $sqlStatement" }
     exec(sqlStatement, args, transform = transform)
 }

@@ -45,23 +45,23 @@ object BitSetSerializer : KSerializer<BitSet> {
 object BinarySerializer : KSerializer<ByteArray> {
 
     override fun serialize(encoder: Encoder, value: ByteArray) {
-        val schema = currentSchema()
-        runBlocking {
-            createTableIfNotExists(schema) { sch, _ ->
-                createBinaryTable(sch)
-            }
-        }
         val id = UUID.randomUUID().toString()
         transaction {
-            putBinary(schema, id, value)
-//            putBinary(schema, id, value.inputStream())
+            val schema = connection.schema
+            runBlocking {
+                createTableIfNotExists(schema) {
+                    createBinaryTable()
+                }
+            }
+            logger.trace { "serialize for id '$id' in schema $schema" }
+            putBinary(id, value)
         }
         encoder.encodeSerializableValue(String.serializer(), id)
     }
 
     override fun deserialize(decoder: Decoder): ByteArray {
         val id = decoder.decodeSerializableValue(String.serializer())
-        return transaction { getBinary(currentSchema(), id) }
+        return transaction { getBinary(id) }
     }
 
     override val descriptor: SerialDescriptor

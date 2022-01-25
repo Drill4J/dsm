@@ -16,6 +16,7 @@
 package com.epam.drill
 
 import com.epam.dsm.*
+import com.epam.dsm.test.*
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.openjdk.jmh.annotations.*
@@ -29,7 +30,7 @@ import kotlin.test.*
 class SaveTest : Configuration() {
 
     private val schema = "binary_perf_test"
-    private val client = StoreClient(schema)
+    private val client = StoreClient(TestDatabaseContainer.createDataSource(schema = schema))
     private val size = 50_000
     private val largeObject = LargeObject(
         "id",
