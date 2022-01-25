@@ -18,6 +18,7 @@
 package com.epam.dsm
 
 import com.epam.dsm.util.*
+import com.zaxxer.hikari.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
 import kotlinx.serialization.*
@@ -31,35 +32,55 @@ import java.util.*
 import kotlin.reflect.*
 import kotlin.time.*
 
-class StoreClient(val schema: String) {
+/**
+ * Can be init by:
+ * @see HikariConfig - this useful for production
+ * @see HikariDataSource - it can be useful for tests, you can close pool connection
+ */
+class StoreClient(hikariConfig: HikariConfig) : AutoCloseable {
+    private val hikariDataSource: HikariDataSource
+    private val database: Database
+    private val schema: String
+
     init {
+        hikariDataSource = if (hikariConfig is HikariDataSource) hikariConfig else HikariDataSource(hikariConfig)
+        database = DatabaseFactory.init(hikariDataSource)
+        schema = hikariDataSource.schema
+
+//      todo transform schema name?
         transaction {
             execWrapper("CREATE SCHEMA IF NOT EXISTS $schema")
         }
     }
 
+    override fun close() {
+        logger.debug { "close store client with $schema..." }
+        TransactionManager.closeAndUnregister(database)
+        hikariDataSource.close()
+    }
+
     suspend fun <T> executeInAsyncTransaction(block: suspend Transaction.() -> T) = withContext(Dispatchers.IO) {
-        newSuspendedTransaction {
+        newSuspendedTransaction(db = database) {
             block(this)
         }
     }
 
     suspend inline fun <reified T : Any> store(any: T) = run {
         executeInAsyncTransaction {
-            store(any, schema)
+            store(any)
         }
         any
     }
 
     suspend inline fun <reified T : Any> getAll(): Collection<T> =
         executeInAsyncTransaction {
-            getAll(schema)
+            getAll()
         }
 
     suspend inline fun <reified T : Any> findById(id: Any): T? =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                findById(schema, id)
+                findById(id)
             }
         }
 
@@ -67,14 +88,14 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> findBy(noinline expression: Expr<T>.() -> Unit) =
         withContext<Collection<T>>(Dispatchers.IO) {
             executeInAsyncTransaction {
-                findBy(schema, expression)
+                findBy(expression)
             }
         }
 
     suspend inline fun <reified T : Any> deleteById(id: Any): Unit =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                deleteById<T>(schema, id)
+                deleteById<T>(id)
             }
         }
 
@@ -82,7 +103,7 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> deleteBy(noinline expression: Expr<T>.() -> Unit) =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                deleteBy(schema, expression)
+                deleteBy(expression)
             }
         }
 
@@ -90,42 +111,35 @@ class StoreClient(val schema: String) {
     suspend inline fun <reified T : Any> deleteAll(): Unit =
         withContext(Dispatchers.IO) {
             executeInAsyncTransaction {
-                deleteAll<T>(schema)
+                deleteAll<T>()
             }
 
         }
 }
 
-suspend inline fun <reified T : Any> Transaction.getAll(schema: String): MutableList<T> {
+suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
     val finalData = mutableListOf<T>()
-    try {
-        dbContext.set(schema)
-        val tableName = T::class.createTableIfNotExists(schema)
-        execWrapper("select JSON_BODY FROM $schema.$tableName") { rs ->
-            while (rs.next()) {
-                finalData.add(
-                    json.decodeFromStream(
-                        T::class.serializer(),
-                        rs.getBinaryStream(1)
-                    )
+    val tableName = T::class.createTableIfNotExists(connection.schema)
+    execWrapper("select JSON_BODY FROM $tableName") { rs ->
+        while (rs.next()) {
+            finalData.add(
+                json.decodeFromStream(
+                    T::class.serializer(),
+                    rs.getBinaryStream(1)
                 )
-            }
+            )
         }
-    } finally {
-        dbContext.remove()
     }
     return finalData
 }
 
 suspend inline fun <reified T : Any> Transaction.findBy(
-    schema: String,
     expression: Expr<T>.() -> Unit,
-) = try {
-    dbContext.set(schema)
-    val tableName = T::class.createTableIfNotExists(schema)
+) = run {
+    val tableName = T::class.createTableIfNotExists(connection.schema)
     val finalData = mutableListOf<T>()
     val sqlStatement = """
-            |SELECT JSON_BODY FROM $schema.$tableName
+            |SELECT JSON_BODY FROM $tableName
             |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
     """.trimMargin()
     execWrapper(sqlStatement) { rs ->
@@ -139,86 +153,71 @@ suspend inline fun <reified T : Any> Transaction.findBy(
         }
     }
     finalData
-} finally {
-    dbContext.remove()
 }
 
 suspend inline fun <reified T : Any> Transaction.findById(
-    schema: String,
     id: Any,
-): T? {
-    try {
-        dbContext.set(schema)
-        var entity: T? = null
-        val tableName = T::class.createTableIfNotExists(schema)
-        execWrapper("select JSON_BODY FROM $schema.$tableName WHERE ID='${id.hashCode()}'") { rs ->
-            if (rs.next()) {
-                entity = json.decodeFromStream(
-                    T::class.serializer(),
-                    rs.getBinaryStream(1)
-                )
-            }
+): T? = run {
+    var entity: T? = null
+    val tableName = T::class.createTableIfNotExists(connection.schema)
+    execWrapper("select JSON_BODY FROM $tableName WHERE ID='${id.hashCode()}'") { rs ->
+        if (rs.next()) {
+            entity = json.decodeFromStream(
+                T::class.serializer(),
+                rs.getBinaryStream(1)
+            )
         }
-        return entity
-    } finally {
-        dbContext.remove()
     }
+    entity
 }
 
 suspend inline fun <reified T : Any> Transaction.deleteById(
-    schema: String,
     id: Any,
 ) {
-    val tableName = T::class.createTableIfNotExists(schema)
-    execWrapper("DELETE FROM $schema.$tableName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
+    val tableName = T::class.createTableIfNotExists(connection.schema)
+    execWrapper("DELETE FROM $tableName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
 }
 
 suspend inline fun <reified T : Any> Transaction.deleteBy(
-    schema: String,
     noinline expression: Expr<T>.() -> Unit,
 ) {
-    val tableName = T::class.createTableIfNotExists(schema)
+    val tableName = T::class.createTableIfNotExists(connection.schema)
     execWrapper(
         """
-                    |DELETE FROM $schema.$tableName
+                    |DELETE FROM $tableName
                     |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
                     """.trimMargin()
     )
 }
 
-suspend inline fun <reified T : Any> Transaction.deleteAll(
-    schema: String,
-) {
-    val tableName = T::class.createTableIfNotExists(schema)
-    execWrapper("DELETE FROM $schema.$tableName")
+suspend inline fun <reified T : Any> Transaction.deleteAll() {
+    val tableName = T::class.createTableIfNotExists(connection.schema)
+    execWrapper("DELETE FROM $tableName")
 }
 
-suspend inline fun <reified T : Any> Transaction.store(any: T, schema: String) {
-    try {
+suspend inline fun <reified T : Any> Transaction.store(any: T) {
+    run {
+        val schema = connection.schema
         val tableName = T::class.createTableIfNotExists(schema)
-        dbContext.set(schema)
         val measureTime = measureTime {
             if (T::class.annotations.any { it is StreamSerialization }) {
-                storeAsStream(any, schema, tableName)
+                storeAsStream(any, tableName)
             } else {
-                storeAsString(any, schema, tableName)
+                storeAsString(any, tableName)
             }
         }
         logger.trace { "Store object took: $measureTime" }
-    } finally {
-        dbContext.remove()
     }
 }
 
 inline fun <reified T : Any> Transaction.storeAsString(
     any: T,
-    schema: String,
     tableName: String,
 ) {
     val (_, idValue) = idPair(any)
     val stmt =
         """
-            |INSERT INTO $schema.${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
@@ -228,7 +227,6 @@ inline fun <reified T : Any> Transaction.storeAsString(
 
 inline fun <reified T : Any> Transaction.storeAsStream(
     any: T,
-    schema: String,
     tableName: String,
 ) {
     val (_, idValue) = idPair(any)
@@ -239,7 +237,7 @@ inline fun <reified T : Any> Transaction.storeAsStream(
         }
         val stmt =
             """
-            |INSERT INTO $schema.${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
         InputStreamReader(file.inputStream()).use {
@@ -261,8 +259,8 @@ val mutex = Mutex()
  */
 suspend fun KClass<*>.createTableIfNotExists(
     schema: String,
-    createTable: Transaction.(String, String) -> Unit = { sch, tableName ->
-        createJsonTable(sch, tableName)
+    createTable: Transaction.(String) -> Unit = { tableName ->
+        createJsonTable(tableName)
     },
 ): String {
     val tableName = camelRegex.replace(this.simpleName!!) {
@@ -274,7 +272,7 @@ suspend fun KClass<*>.createTableIfNotExists(
 suspend inline fun createTableIfNotExists(
     schema: String,
     tableName: String = "",
-    noinline createTable: Transaction.(String, String) -> Unit,
+    noinline createTable: Transaction.(String) -> Unit,
 ): String {
     val tableKey = "$schema.$tableName"
     if (!createdTables.contains(tableKey)) {
@@ -282,7 +280,7 @@ suspend inline fun createTableIfNotExists(
             logger.trace { "check after lock $tableKey in $createdTables " }
             if (!createdTables.contains(tableKey)) {
                 transaction {
-                    createTable(schema, tableName)
+                    createTable(tableName)
                 }
                 createdTables.add(tableKey)
             }

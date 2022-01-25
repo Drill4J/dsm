@@ -75,7 +75,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
             val job = launch(Dispatchers.Default) {
                 println("storing $it...")
                 agentStore.executeInAsyncTransaction {
-                    store(simpleObject.copy(id = "agent$it"), agentStore.schema)
+                    store(simpleObject.copy(id = "agent$it"))
                 }
                 println("finished $it")
             }
@@ -93,8 +93,8 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
             val job = launch(Dispatchers.Default) {
                 println("storing $it...")
                 agentStore.executeInAsyncTransaction {
-                    store(simpleObject.copy(id = "agentA_$it"), agentStore.schema)
-                    store(simpleObject.copy(id = "agentB_$it"), agentStore.schema)
+                    store(simpleObject.copy(id = "agentA_$it"))
+                    store(simpleObject.copy(id = "agentB_$it"))
                 }
                 println("finished $it")
             }

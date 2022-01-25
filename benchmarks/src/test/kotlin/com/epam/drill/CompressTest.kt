@@ -16,6 +16,7 @@
 package com.epam.drill
 
 import com.epam.dsm.*
+import com.epam.dsm.test.*
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.openjdk.jmh.annotations.*
@@ -31,7 +32,7 @@ class CompressTest : Configuration() {
     private val filePath = ""
     private val bytes = File(filePath).readBytes()
     private val schema = "binary_perf_test"
-    private val store = StoreClient(schema)
+    private val store = StoreClient(TestDatabaseContainer.createDataSource(schema = schema))
 
     @Setup
     fun before() {

@@ -7,7 +7,7 @@ Where kotlin data classes which marked with @Serializable, can easily be stored 
 Postgres DB without describing schemas.
 
 ## Example
-###Jsonb table
+### Jsonb table
 add @Serializable and @Id to data classes
 ```kotlin
 @Serializable
@@ -46,7 +46,7 @@ Example jsonb:
 }
 ```
 
-###Binarya table
+### Binarya table
 1) add @Serializable and @Id to data classes
 2) add @Serializable(with = BinarySerializer::class) for ByteArray
 ```kotlin

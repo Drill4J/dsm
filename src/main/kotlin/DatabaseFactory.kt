@@ -23,9 +23,7 @@ object DatabaseFactory {
         Database.connect(hikari())
     }
 
-    fun init(hikariDataSource: HikariDataSource) {
-        Database.connect(hikariDataSource)
-    }
+    fun init(hikariDataSource: HikariDataSource): Database = Database.connect(hikariDataSource)
 
     private fun hikari(): HikariDataSource {
         val config = HikariConfig()
@@ -33,8 +31,8 @@ object DatabaseFactory {
         config.jdbcUrl = "jdbc:postgresql://localhost:5432/postgres"
         config.username = "postgres"
         config.password = "mysecretpassword"
-        config.maximumPoolSize = 3
-        config.isAutoCommit = false
+        config.maximumPoolSize = 10
+        config.isAutoCommit = true
         config.transactionIsolation = "TRANSACTION_REPEATABLE_READ"
         config.validate()
         return HikariDataSource(config)

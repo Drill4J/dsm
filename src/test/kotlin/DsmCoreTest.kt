@@ -237,8 +237,8 @@ class DsmCoreTest : PostgresBased("plugin") {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-                store(complexObject, agentStore.schema)
-                store(complexObject.copy(id = "second"), agentStore.schema)
+                store(complexObject)
+                store(complexObject.copy(id = "second"))
             }
         } catch (ignored: Throwable) {
         }
@@ -250,7 +250,7 @@ class DsmCoreTest : PostgresBased("plugin") {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-                store(complexObject, agentStore.schema)
+                store(complexObject)
                 fail("test")
             }
         } catch (ignored: Throwable) {
@@ -258,13 +258,12 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertTrue(agentStore.getAll<ComplexObject>().isEmpty())
     }
 
-    @Disabled //todo store without schema name
     @Test
     fun `should be transactional without schema name`() = runBlocking {
         try {
             @Suppress("IMPLICIT_NOTHING_AS_TYPE_PARAMETER")
             agentStore.executeInAsyncTransaction {
-//                store(complexObject)
+                store(complexObject)
                 fail("test")
             }
         } catch (ignored: Throwable) {
@@ -278,10 +277,10 @@ class DsmCoreTest : PostgresBased("plugin") {
         agentStore.store(complexObject.copy(id = "2"))
         try {
             agentStore.executeInAsyncTransaction {
-                deleteBy<ComplexObject>(agentStore.schema) { ComplexObject::id eq "1" }
+                deleteBy<ComplexObject> { ComplexObject::id eq "1" }
                 fail("test")
                 @Suppress("UNREACHABLE_CODE")
-                deleteBy<ComplexObject>(agentStore.schema) { ComplexObject::id eq "2" }
+                deleteBy<ComplexObject> { ComplexObject::id eq "2" }
             }
         } catch (ignored: Throwable) {
             println(ignored)
