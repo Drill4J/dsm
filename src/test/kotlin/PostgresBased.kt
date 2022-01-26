@@ -21,7 +21,7 @@ import kotlin.test.*
 
 abstract class PostgresBased(schema: String) {
 
-    val agentStore = StoreClient(TestDatabaseContainer.createDataSource(schema = schema))
+    val storeClient = StoreClient(TestDatabaseContainer.createDataSource(schema = schema))
 
     companion object {
         @BeforeAll

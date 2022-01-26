@@ -19,7 +19,8 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Test
-import kotlin.random.*
+import java.util.*
+import kotlin.random.Random
 import kotlin.test.*
 
 /**
@@ -56,8 +57,9 @@ class MemoryUsageTest : PostgresBased(schema) {
 
     private suspend fun loadSession(s: String) {
         println("Loading session")
-        val finishSession = agentStore.findById<FinishSession>(s)
+        val finishSession = storeClient.findById<FinishSession>(s)
         assertTrue((finishSession?.execClassData?.size ?: 0) > 0)
+        assertTrue((finishSession?.execClassData?.sumBy { it.probes.size() } ?: 0) > 0)
     }
 
     private suspend fun startStopSession(
@@ -74,34 +76,35 @@ class MemoryUsageTest : PostgresBased(schema) {
                 ExecClassData(
                     id = Random.nextLong(100_000_000),
                     className = "foo/Bar",
-                    probes = randomBoolean(sizeProbes)
+                    probes = BitSet(sizeProbes)
                 )
             }
             collection = execClassData
         }
 
-        agentStore.store(FinishSession(sessionId, collection))
+        storeClient.store(FinishSession(sessionId, collection))
 
     }
 
     private fun randomBoolean(n: Int = 100) = listOf(0 until n).flatten().map { true }
-
-    @Serializable
-    @StreamSerialization
-    data class FinishSession(
-        @Id
-        val sessionId: String,
-        val execClassData: List<ExecClassData>,
-    )
-
-    @Serializable
-    data class ExecClassData(
-        val id: Long? = null,
-        val className: String,
-        val probes: List<Boolean>,
-        val testName: String = "",
-    )
 }
+
+@Serializable
+@StreamSerialization
+data class FinishSession(
+    @Id
+    val sessionId: String,
+    val execClassData: List<ExecClassData>,
+)
+
+@Serializable
+data class ExecClassData(
+    val id: Long? = null,
+    val className: String,
+    @Serializable(with = BitSetSerializer::class)
+    val probes: BitSet,
+    val testName: String = "",
+)
 
 
 /**
@@ -130,15 +133,15 @@ class StreamSerializationTest : PostgresBased(schema) {
 
     @Test()
     fun `save object using stream memory test`(): Unit = runBlocking {
-        agentStore.store(annotatedLargeObject)
-        val largeObjectFromDB = agentStore.findById<LargeObjectWithStreamSerializationAnnotation>("id")
+        storeClient.store(annotatedLargeObject)
+        val largeObjectFromDB = storeClient.findById<LargeObjectWithStreamSerializationAnnotation>("id")
         assertEquals(annotatedLargeObject, largeObjectFromDB)
     }
 
     @Test
     fun `save object as string memory test`() = runBlocking {
-        agentStore.store(largeObject)
-        val largeObjectFromDB = agentStore.findById<LargeObject>("id")
+        storeClient.store(largeObject)
+        val largeObjectFromDB = storeClient.findById<LargeObject>("id")
         assertEquals(largeObjectFromDB, largeObjectFromDB)
     }
 }

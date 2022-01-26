@@ -31,7 +31,7 @@ class MigrationTest : PostgresBased("migration") {
 
     @BeforeTest
     fun setUp() = runBlocking {
-        agentStore.createProcedureIfTableExist()
+        storeClient.createProcedureIfTableExist()
     }
 
     lateinit var flyway: Flyway
@@ -58,29 +58,29 @@ class MigrationTest : PostgresBased("migration") {
 
     @Test
     fun `should skip migration when table does not exist`() = runBlocking {
-        agentStore.migrate("remove")
-        assertEquals(0, agentStore.getAll<RemoveField>().size)
+        storeClient.migrate("remove")
+        assertEquals(0, storeClient.getAll<RemoveField>().size)
     }
 
     @Test
     fun `should skip migration when table exist in another schema`() = runBlocking {
         val another = StoreClient(hikariConfig = TestDatabaseContainer.createConfig(schema = "another"))
         another.store(RemoveField("dd"))
-        agentStore.migrate("remove")
-        assertEquals(0, agentStore.getAll<RemoveField>().size)
+        storeClient.migrate("remove")
+        assertEquals(0, storeClient.getAll<RemoveField>().size)
     }
 
     @Test
     fun `should remove field when has migration script`() = runBlocking {
-        val tableName = RemoveField::class.createTableIfNotExists(agentStore.hikariConfig.schema)
+        val tableName = RemoveField::class.createTableIfNotExists(storeClient.hikariConfig.schema)
         val id = "id"
         transaction {
             storeAsString(RemoveFieldOld(id, "this field will be removed in migration"), tableName)
         }
 
-        agentStore.migrate("remove")
+        storeClient.migrate("remove")
 
-        assertEquals(RemoveField(id), agentStore.getAll<RemoveField>().first())
+        assertEquals(RemoveField(id), storeClient.getAll<RemoveField>().first())
     }
 
     @Serializable
@@ -96,16 +96,16 @@ class MigrationTest : PostgresBased("migration") {
 
     @Test
     fun `should rename field when has migration script`() = runBlocking {
-        val tableName = RenameField::class.createTableIfNotExists(agentStore.hikariConfig.schema)
+        val tableName = RenameField::class.createTableIfNotExists(storeClient.hikariConfig.schema)
         val id = "id"
         val value = "this field will be renamed"
         transaction {
             storeAsString(RenameFieldOld(id, value), tableName)
         }
 
-        agentStore.migrate("rename")
+        storeClient.migrate("rename")
 
-        assertEquals(RenameField(id, value), agentStore.getAll<RenameField>().first())
+        assertEquals(RenameField(id, value), storeClient.getAll<RenameField>().first())
     }
 
     @Serializable

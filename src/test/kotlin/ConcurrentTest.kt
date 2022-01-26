@@ -25,7 +25,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
     fun `should make queries sequence`() = runBlocking {
         repeat(100) {
             println("$it starting")
-            val simpleObject = agentStore.findById<SimpleObject>("id$it")
+            val simpleObject = storeClient.findById<SimpleObject>("id$it")
             assertNull(simpleObject)
             println("$it finished")
         }
@@ -35,7 +35,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
     fun `should parallel find`() = runBlocking {
         repeat(10) {
             launch(Dispatchers.Default) {
-                agentStore.findById<SimpleObject>("id$it")
+                storeClient.findById<SimpleObject>("id$it")
             }
         }
     }
@@ -44,11 +44,11 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
     fun `should store sequence`() = runBlocking {
         repeat(100) {
             println("store $it")
-            agentStore.store(simpleObject.copy(id = "agent$it"))
+            storeClient.store(simpleObject.copy(id = "agent$it"))
             println("$it finished")
         }
         println("finished")
-        assertEquals(100, agentStore.getAll<SimpleObject>().size)
+        assertEquals(100, storeClient.getAll<SimpleObject>().size)
     }
 
     @Test
@@ -58,13 +58,13 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
         repeat(times) {
             val job = launch(Dispatchers.Default) {
                 println("store $it")
-                agentStore.store(simpleObject.copy(id = "agent$it"))
+                storeClient.store(simpleObject.copy(id = "agent$it"))
                 println("finished $it")
             }
             list.add(job)
         }
         joinAll(*list.toTypedArray())
-        assertEquals(times, agentStore.getAll<SimpleObject>().size)
+        assertEquals(times, storeClient.getAll<SimpleObject>().size)
     }
 
     @Test
@@ -74,7 +74,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
         repeat(times) {
             val job = launch(Dispatchers.Default) {
                 println("storing $it...")
-                agentStore.executeInAsyncTransaction {
+                storeClient.executeInAsyncTransaction {
                     store(simpleObject.copy(id = "agent$it"))
                 }
                 println("finished $it")
@@ -82,7 +82,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
             list.add(job)
         }
         joinAll(*list.toTypedArray())
-        assertEquals(times, agentStore.getAll<SimpleObject>().size)
+        assertEquals(times, storeClient.getAll<SimpleObject>().size)
     }
 
     @Test
@@ -92,7 +92,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
         repeat(times) {
             val job = launch(Dispatchers.Default) {
                 println("storing $it...")
-                agentStore.executeInAsyncTransaction {
+                storeClient.executeInAsyncTransaction {
                     store(simpleObject.copy(id = "agentA_$it"))
                     store(simpleObject.copy(id = "agentB_$it"))
                 }
@@ -101,7 +101,7 @@ class ConcurrentTest : PostgresBased("concurrent_test") {
             list.add(job)
         }
         joinAll(*list.toTypedArray())
-        assertEquals(times * 2, agentStore.getAll<SimpleObject>().size)
+        assertEquals(times * 2, storeClient.getAll<SimpleObject>().size)
     }
 
 }
