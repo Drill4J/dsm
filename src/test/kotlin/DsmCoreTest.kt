@@ -73,6 +73,14 @@ class DsmCoreTest : PostgresBased("plugin") {
     }
 
     @Test
+    fun `should store and retrieve a simple object with single quote`() = runBlocking {
+        val simpleObject = SimpleObject("id", "string with ' single quote", 1, Last(1))
+        agentStore.store(simpleObject)
+        val simpleObject1 = agentStore.findById<SimpleObject>(simpleObject.id)
+        assertEquals(simpleObject1?.string, simpleObject.string)
+    }
+
+    @Test
     fun `should retrieve null when object does not added`() = runBlocking {
         val simpleObject = agentStore.findById<SimpleObject>("12412d")
         assertNull(simpleObject)
