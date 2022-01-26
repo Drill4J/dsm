@@ -216,13 +216,14 @@ inline fun <reified T : Any> Transaction.storeAsString(
     tableName: String,
 ) {
     val (_, idValue) = idPair(any)
-    val json = json.encodeToString(T::class.serializer(), any)
     val stmt =
         """
-            |INSERT INTO $schema.${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', '$json')
+            |INSERT INTO $schema.${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
-    execWrapper(stmt)
+    val stm = connection.prepareStatement(stmt, false)
+    stm[1] = json.encodeToString(T::class.serializer(), any)
+    stm.executeUpdate()
 }
 
 inline fun <reified T : Any> Transaction.storeAsStream(
