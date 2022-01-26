@@ -15,15 +15,13 @@
  */
 package com.epam.dsm
 
-import com.epam.dsm.serializer.BitSetSerializer
-import com.epam.dsm.util.execWrapper
-import com.epam.dsm.util.toBitSet
+import com.epam.dsm.serializer.*
+import com.epam.dsm.util.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.sql.transactions.transaction
+import kotlinx.serialization.*
+import org.jetbrains.exposed.sql.transactions.*
 import java.util.*
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.*
 
 class BitSetTest : PostgresBased("bitset") {
 
@@ -47,14 +45,14 @@ class BitSetTest : PostgresBased("bitset") {
                 set(0)
             }
         val id = "someIDhere"
-        agentStore.store(
+        storeClient.store(
             BitsetClass(
                 id,
                 btst
             )
         )
         println("finished")
-        assertEquals(btst, agentStore.findById<BitsetClass>(id)?.btst)
+        assertEquals(btst, storeClient.findById<BitsetClass>(id)?.btst)
     }
 
     @Test //todo split it to separate tests
@@ -64,7 +62,7 @@ class BitSetTest : PostgresBased("bitset") {
         (0..size).forEach { i ->
             val id = "someIDhere$i"
             println(id)
-            agentStore.store(
+            storeClient.store(
                 BitsetClass(
                     id,
                     BitSet(size)

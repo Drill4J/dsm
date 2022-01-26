@@ -31,8 +31,8 @@ class InitStoreClientTest : PostgresBased("public") {
 
     @Test
     fun `should create one public connection`() = runBlocking {
-        agentStore.store(simpleObject)
-        assertEquals(simpleObject, agentStore.getAll<SimpleObject>().first())
+        storeClient.store(simpleObject)
+        assertEquals(simpleObject, storeClient.getAll<SimpleObject>().first())
     }
 
     @Test
@@ -41,11 +41,11 @@ class InitStoreClientTest : PostgresBased("public") {
 
         another.store(simpleObject)
         assertEquals(simpleObject, another.getAll<SimpleObject>().first())
-        agentStore.store(simpleObject)
-        agentStore.store(simpleObject.copy(id = "id2"))
+        storeClient.store(simpleObject)
+        storeClient.store(simpleObject.copy(id = "id2"))
 
         assertEquals(1, another.getAll<SimpleObject>().size)
-        assertEquals(2, agentStore.getAll<SimpleObject>().size)
+        assertEquals(2, storeClient.getAll<SimpleObject>().size)
     }
 
     @RepeatedTest(value = 15)

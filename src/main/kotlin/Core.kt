@@ -17,18 +17,26 @@
 
 package com.epam.dsm
 
+import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
+import com.zaxxer.hikari.pool.*
 import com.zaxxer.hikari.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
 import kotlinx.serialization.*
+import kotlinx.serialization.builtins.*
+import kotlinx.serialization.encoding.*
+import kotlinx.serialization.internal.*
 import kotlinx.serialization.json.*
+import org.jetbrains.exposed.dao.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.jdbc.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
+import org.postgresql.util.*
 import java.io.*
 import java.util.*
+import kotlin.math.*
 import kotlin.reflect.*
 import kotlin.time.*
 
@@ -38,7 +46,8 @@ import kotlin.time.*
  * @see HikariDataSource - it can be useful for tests, you can close pool connection
  */
 class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
-    private val hikariDataSource = if (hikariConfig is HikariDataSource) hikariConfig else HikariDataSource(hikariConfig)
+    private val hikariDataSource =
+        if (hikariConfig is HikariDataSource) hikariConfig else HikariDataSource(hikariConfig)
     private val database = DatabaseFactory.init(hikariDataSource)
     private val schema = hikariDataSource.schema
 
@@ -120,11 +129,12 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
 suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
     val finalData = mutableListOf<T>()
     val tableName = T::class.createTableIfNotExists(connection.schema)
+    val classLoader = T::class.java.classLoader
     execWrapper("select JSON_BODY FROM $tableName") { rs ->
         while (rs.next()) {
             finalData.add(
                 json.decodeFromStream(
-                    T::class.serializer(),
+                    T::class.dsmSerializer(classLoader),
                     rs.getBinaryStream(1)
                 )
             )
@@ -138,6 +148,7 @@ suspend inline fun <reified T : Any> Transaction.findBy(
 ) = run {
     val tableName = T::class.createTableIfNotExists(connection.schema)
     val finalData = mutableListOf<T>()
+    val classLoader = T::class.java.classLoader
     val sqlStatement = """
             |SELECT JSON_BODY FROM $tableName
             |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
@@ -146,7 +157,7 @@ suspend inline fun <reified T : Any> Transaction.findBy(
         while (rs.next()) {
             finalData.add(
                 json.decodeFromStream(
-                    T::class.serializer(),
+                    T::class.dsmSerializer(classLoader),
                     rs.getBinaryStream(1)
                 )
             )
@@ -160,15 +171,40 @@ suspend inline fun <reified T : Any> Transaction.findById(
 ): T? = run {
     var entity: T? = null
     val tableName = T::class.createTableIfNotExists(connection.schema)
+    val classLoader = T::class.java.classLoader
     execWrapper("select JSON_BODY FROM $tableName WHERE ID='${id.hashCode()}'") { rs ->
         if (rs.next()) {
             entity = json.decodeFromStream(
-                T::class.serializer(),
+                T::class.dsmSerializer(classLoader),
                 rs.getBinaryStream(1)
             )
         }
     }
     entity
+}
+
+inline fun <reified T : Any> findByIds(
+    ids: Collection<T>,
+    elementClass: KClass<*>,
+    elementSerializer: KSerializer<T>
+): Iterable<T> = transaction {
+    val entities: MutableList<T> = mutableListOf()
+    if (ids.isEmpty()) return@transaction entities
+    val schema = connection.schema
+    val tableName = runBlocking {
+        elementClass.createTableIfNotExists(schema)
+    }
+    val idString = ids.joinToString { "'$it'" }
+    val stm = "select JSON_BODY FROM $tableName WHERE ID in ($idString)"
+    val statement = (connection.connection as HikariProxyConnection).createStatement()
+    statement.fetchSize = DSM_FETCH_AND_PUSH_LIMIT
+    statement.executeQuery(stm).let { rs ->
+        while (rs.next()) {
+            val element = json.decodeFromStream(elementSerializer, rs.getBinaryStream(1))
+            entities.add(element)
+        }
+    }
+    return@transaction entities
 }
 
 suspend inline fun <reified T : Any> Transaction.deleteById(
@@ -214,30 +250,80 @@ inline fun <reified T : Any> Transaction.storeAsString(
     any: T,
     tableName: String,
 ) {
-    val (_, idValue) = idPair(any)
+    val id = any.id()
+    val classLoader = T::class.java.classLoader
     val stmt =
         """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('$id', CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
-    stm[1] = json.encodeToString(T::class.serializer(), any)
+    stm[1] = json.encodeToString(T::class.dsmSerializer(classLoader, id), any)
     stm.executeUpdate()
+}
+
+inline fun <reified T : Any> storeCollection(
+    collection: Iterable<T>,
+    parentId: Int?,
+    elementClass: KClass<*>,
+    elementSerializer: KSerializer<T>
+): Unit = transaction {
+    val schema = connection.schema
+    val tableName = runBlocking {
+        elementClass.createTableIfNotExists(schema)
+    }
+    val file = File.createTempFile("prefix-", "-postfix") // TODO EPMDJ-9370 Remove file creating
+    try {
+        val sizes = mutableListOf<Int>()
+        file.outputStream().use {
+            collection.forEach { value ->
+                val json = json.encodeToString(elementSerializer, value)
+                sizes.add(json.length)
+                it.write(json.toByteArray())
+            }
+        }
+        file.inputStream().reader().use {
+            transaction {
+                val statement = (connection.connection as HikariProxyConnection).createStatement()
+                sizes.forEachIndexed { index, size ->
+                    val value = readerToString(it, size)
+                    val stmt =
+                        """
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${
+                            elementId(
+                                index,
+                                parentId
+                            )
+                        }', '$value')
+            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+        """.trimMargin()
+                    statement.addBatch(stmt)
+                    if (index % DSM_FETCH_AND_PUSH_LIMIT == 0) {
+                        statement.executeBatch()
+                    }
+                }
+                statement.executeBatch()
+            }
+        }
+    } finally {
+        file.delete()
+    }
 }
 
 inline fun <reified T : Any> Transaction.storeAsStream(
     any: T,
     tableName: String,
 ) {
-    val (_, idValue) = idPair(any)
+    val id = any.id()
     val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
     try {
+        val classLoader = T::class.java.classLoader
         file.outputStream().use {
-            json.encodeToStream(T::class.serializer(), any, it)
+            json.encodeToStream(T::class.dsmSerializer(classLoader, id), any, it)
         }
         val stmt =
             """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${idValue.hashCode()}', CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('$id', CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
         """.trimMargin()
         InputStreamReader(file.inputStream()).use {

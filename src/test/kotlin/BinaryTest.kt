@@ -41,8 +41,8 @@ class BinaryTest : PostgresBased(schema) {
     fun `should store and retrieve binary data`() = runBlocking {
         val id = "someIDhere"
         val any = BinaryClass(id, byteArrayOf(1, 0, 1))
-        agentStore.store(any)
-        assertEquals(any.bytes.contentToString(), agentStore.findById<BinaryClass>(id)?.bytes?.contentToString())
+        storeClient.store(any)
+        assertEquals(any.bytes.contentToString(), storeClient.findById<BinaryClass>(id)?.bytes?.contentToString())
     }
 
     @Test
@@ -66,19 +66,19 @@ class BinaryTest : PostgresBased(schema) {
     fun `should store and retrieve binary data in two differ schema`() = runBlocking {
         val id = "someIDhere"
         val any = BinaryClass(id, byteArrayOf(1, 0, 1))
-        agentStore.store(any)
-        assertEquals(any.bytes.contentToString(), agentStore.findById<BinaryClass>(id)?.bytes?.contentToString())
+        storeClient.store(any)
+        assertEquals(any.bytes.contentToString(), storeClient.findById<BinaryClass>(id)?.bytes?.contentToString())
 
         val newDbName = "newdb"
         val newDb = StoreClient(TestDatabaseContainer.createConfig(schema = newDbName))
 
         newDb.store(any)
-        assertEquals(any.bytes.contentToString(), agentStore.findById<BinaryClass>(id)?.bytes?.contentToString())
+        assertEquals(any.bytes.contentToString(), storeClient.findById<BinaryClass>(id)?.bytes?.contentToString())
         assertEquals(any.bytes.contentToString(), newDb.findById<BinaryClass>(id)?.bytes?.contentToString())
 
-        agentStore.store(any.copy(id = "2"))
+        storeClient.store(any.copy(id = "2"))
 
-        assertEquals(2, agentStore.getAll<BinaryClass>().size)
+        assertEquals(2, storeClient.getAll<BinaryClass>().size)
         assertEquals(1, newDb.getAll<BinaryClass>().size)
     }
 

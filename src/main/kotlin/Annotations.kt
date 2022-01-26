@@ -15,7 +15,7 @@
  */
 package com.epam.dsm
 
-import kotlinx.serialization.SerialInfo
+import kotlinx.serialization.*
 
 @SerialInfo
 @Target(AnnotationTarget.PROPERTY, AnnotationTarget.CLASS)
