@@ -33,6 +33,7 @@ val testContainerVersion: String by project
 val loggerVersion: String by project
 val zstVersion: String by project
 val collectionImmutableVersion: String by extra
+val flywayVersion: String by extra
 
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
@@ -53,6 +54,7 @@ dependencies {
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
+    testImplementation("org.flywaydb:flyway-core:$flywayVersion")
     testImplementation(project(":test-framework"))
 }
 
