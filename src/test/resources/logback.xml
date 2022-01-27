@@ -29,4 +29,5 @@
     <logger name="com.zaxxer.hikari" level="info"/>
     <logger name="org.testcontainers" level="INFO"/>
     <logger name="com.github.dockerjava" level="WARN"/>
+    <logger name="org.flywaydb.core" level="info"/>
 </configuration>

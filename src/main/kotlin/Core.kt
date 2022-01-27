@@ -37,16 +37,12 @@ import kotlin.time.*
  * @see HikariConfig - this useful for production
  * @see HikariDataSource - it can be useful for tests, you can close pool connection
  */
-class StoreClient(hikariConfig: HikariConfig) : AutoCloseable {
-    private val hikariDataSource: HikariDataSource
-    private val database: Database
-    private val schema: String
+class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
+    private val hikariDataSource = if (hikariConfig is HikariDataSource) hikariConfig else HikariDataSource(hikariConfig)
+    private val database = DatabaseFactory.init(hikariDataSource)
+    private val schema = hikariDataSource.schema
 
     init {
-        hikariDataSource = if (hikariConfig is HikariDataSource) hikariConfig else HikariDataSource(hikariConfig)
-        database = DatabaseFactory.init(hikariDataSource)
-        schema = hikariDataSource.schema
-
 //      todo transform schema name?
         transaction {
             execWrapper("CREATE SCHEMA IF NOT EXISTS $schema")
@@ -63,6 +59,10 @@ class StoreClient(hikariConfig: HikariConfig) : AutoCloseable {
         newSuspendedTransaction(db = database) {
             block(this)
         }
+    }
+
+    fun <T> executeInTransaction(block: Transaction.() -> T): T = transaction(db = database) {
+        block(this)
     }
 
     suspend inline fun <reified T : Any> store(any: T) = run {
