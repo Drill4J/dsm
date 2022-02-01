@@ -96,20 +96,21 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
     suspend inline fun <reified T : Any, reified E : Any> findInList(
         whatReturn: String,
         listWay: String,
-        listDescription: String,
+        listDescription: String,//todo pass the class and convert to sql
         where: String = "",
-    ) = withContext(Dispatchers.IO) {
+    ): List<E> = withContext(Dispatchers.IO) {
         executeInAsyncTransaction {
-            try {
-                val resultList = mutableListOf<E>()
-                val tableName = T::class.createTableIfNotExists(connection.schema)
-                execWrapper(
-                    """
+            val resultList = mutableListOf<E>()
+            val tableName = T::class.createTableIfNotExists(connection.schema)
+            val sqlFind = """
                             select $whatReturn 
                             FROM $tableName,
                                 jsonb_to_recordset($tableName.json_body -> $listWay) as $listDescription
                             $where
-                        """.trimIndent()
+                        """
+            try {
+                execWrapper(
+                    sqlFind.trimIndent()
                 ) {
                     while (it.next()) {
                         it.getString(1)?.let { jsonBody ->
@@ -124,8 +125,8 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
                 }
                 resultList
             } catch (e: Exception) {
-                logger.warn { "cannot find cause exc: $e" }
-                emptyList()
+                logger.warn { "cannot find for sql '$sqlFind' cause exc: $e" }
+                throw e
             }
         }
     }

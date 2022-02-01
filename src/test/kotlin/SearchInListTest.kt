@@ -16,7 +16,9 @@
 package com.epam.dsm
 
 import kotlinx.coroutines.*
+import org.junit.jupiter.api.*
 import kotlin.test.*
+import kotlin.test.Test
 
 class SearchInListTest : PostgresBased("plugin") {
     private val blink = SubObject("subStr", 12, Last(2.toByte()))
@@ -48,6 +50,20 @@ class SearchInListTest : PostgresBased("plugin") {
         assertEquals(listOf(setPayloadWithTest, setPayload), find)
     }
 
+    @Test
+    fun `should find string when use to_jsonb`() = runBlocking {
+        agentStore.store(payloadWithIdList)
+        agentStore.store(payloadWithIdList2)
+        val find = agentStore.findInList<PayloadWithIdList, String>(
+            whatReturn = "to_jsonb(items.id)",//todo always need use?? to_jsonb(<smth>)
+            listWay = "'list'",
+            listDescription = "items(\"id\" text, \"name\" text, \"subObject\" jsonb)",
+            where = "where name = '$testName'",
+        )
+        println(find)
+        assertEquals(listOf("first", "third"), find)
+    }
+
 
     @Test
     fun `should find primitives when use operand in jsonb`() = runBlocking {
@@ -66,24 +82,24 @@ class SearchInListTest : PostgresBased("plugin") {
     fun `should find nothing when in where cannot find`() = runBlocking {
         agentStore.store(payloadWithIdList)
         agentStore.store(payloadWithIdList2)
-        val find = agentStore.findInList<PayloadWithIdList, Int>(
+        val result = agentStore.findInList<PayloadWithIdList, SetPayload>(
             whatReturn = "to_jsonb(items)",
             listWay = "'list'",
             listDescription = "items(\"id\" text, \"name\" text, \"subObject\" jsonb)",
             where = "where name = 'test3'"
         )
-        assertEquals(listOf(), find)
+        assertEquals(listOf(), result)
     }
 
     @Test
     fun `should find all subObjects when not filter`() = runBlocking {
         agentStore.store(payloadWithIdList)
-        val find = agentStore.findInList<PayloadWithIdList, SubObject>(
+        val result = agentStore.findInList<PayloadWithIdList, SubObject>(
             whatReturn = "\"subObject\"",
             listWay = "'list'",
             listDescription = "items(\"id\" text, \"name\" text, \"subObject\" jsonb)",
         )
-        assertEquals(listOf(blink, blink), find)
+        assertEquals(listOf(blink, blink), result)
     }
 
     @Test
@@ -97,12 +113,82 @@ class SearchInListTest : PostgresBased("plugin") {
                 )
             )
         )
-        val find = agentStore.findInList<PayloadWithIdList, SubObject>(
+        val result = agentStore.findInList<PayloadWithIdList, SubObject>(
             whatReturn = "\"subObject\"",
             listWay = "'list'",
             listDescription = "items(\"id\" text, \"name\" text, \"subObject\" jsonb)",
         )
-        assertEquals(listOf(blink), find)
+        assertEquals(listOf(blink), result)
+    }
+
+
+    private val first = AllDefaultPayload(str = "first", num = 1)
+    private val second = AllDefaultPayload(str = "second", enum = EnumExample.SECOND)
+    private val defaults = listOf(
+        AllDefaultPayload(str = "first", num = 1),
+        AllDefaultPayload(str = "second", enum = EnumExample.SECOND))
+
+
+    @Test
+    fun `should find enum by filter`() = runBlocking {
+        agentStore.store(
+            ListWithDefaults(id = "some-id", list = defaults)
+        )
+        val result = agentStore.findInList<ListWithDefaults, EnumExample>(
+            whatReturn = "to_jsonb(enum)",
+            listWay = "'list'",
+            listDescription = "items(\"num\" text, \"str\" text, \"enum\" text)",
+            where = "where str = '${second.str}'"
+        )
+        assertEquals(listOf(EnumExample.SECOND), result)
+    }
+
+    @Disabled("not implement. Cannot deserialize to default value")
+    @Test
+    fun `should find default value by filter`() = runBlocking {
+        agentStore.store(
+            ListWithDefaults(id = "some-id",
+                list = defaults)
+        )
+        val result = agentStore.findInList<ListWithDefaults, Int>(
+            whatReturn = "to_jsonb(num)",
+            listWay = "'list'",
+            listDescription = "items(\"num\" text, \"str\" text, \"enum\" text)",
+            where = "where str = '${second.str}'"
+        )
+        assertEquals(listOf(second.num), result)
+    }
+
+    @Test
+    fun `should find string by field which has default values`() = runBlocking {
+        agentStore.store(
+            ListWithDefaults(id = "some-id",
+                list = defaults)
+        )
+        val result = agentStore.findInList<ListWithDefaults, String>(
+            whatReturn = "to_jsonb(str)",
+            listWay = "'list'",
+            listDescription = "items(\"num\" int, \"str\" text, \"enum\" text)",
+            where = "where num is null"
+        )
+        assertEquals(listOf(second.str), result)
+    }
+
+    @Disabled("not implement. find null values which is not deserialized. possible solution: https://dba.stackexchange.com/questions/197256/equivalent-to-json-strip-nulls-for-postgres-9-4")
+    @Test
+    fun `should find objects by field which has default values`() = runBlocking {
+        agentStore.store(
+            ListWithDefaults(id = "some-id",
+                list = defaults)
+        )
+        val result = agentStore.findInList<ListWithDefaults, AllDefaultPayload>(
+            whatReturn = "to_jsonb(items)",
+            listWay = "'list'",
+            listDescription = "items(\"num\" int, \"str\" text, \"enum\" text)",
+            where = "where num is null"
+        )
+        assertEquals(listOf(second), result)
+        assertEquals(second.num, result.first().num)
     }
 }
 

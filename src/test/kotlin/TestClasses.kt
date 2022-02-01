@@ -113,10 +113,17 @@ data class ObjectWithDefaults(
 )
 
 @Serializable
+data class ListWithDefaults(
+    @Id val id: String,
+    val list : List<AllDefaultPayload>,
+)
+
+@Serializable
 data class AllDefaultPayload(
     val num: Int = 0,
     val str: String = "",
     val list: List<String> = emptyList(),
+    val enum: EnumExample = EnumExample.FIRST,
 )
 
 @Serializable
