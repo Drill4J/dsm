@@ -20,7 +20,7 @@ import org.junit.jupiter.api.*
 import kotlin.test.*
 import kotlin.test.Test
 
-class SearchInListTest : PostgresBased("plugin") {
+class SearchInListTest : PostgresBased("search") {
     private val blink = SubObject("subStr", 12, Last(2.toByte()))
     private val testName = "test1"
     private val setPayloadWithTest = SetPayload(id = "first", name = testName, blink)
@@ -122,12 +122,9 @@ class SearchInListTest : PostgresBased("plugin") {
     }
 
 
-    private val first = AllDefaultPayload(str = "first", num = 1)
-    private val second = AllDefaultPayload(str = "second", enum = EnumExample.SECOND)
-    private val defaults = listOf(
-        AllDefaultPayload(str = "first", num = 1),
-        AllDefaultPayload(str = "second", enum = EnumExample.SECOND))
-
+    private val firstDefault = AllDefaultPayload(str = "first", num = 1)
+    private val secondDefault = AllDefaultPayload(str = "second", enum = EnumExample.SECOND)
+    private val defaults = listOf(firstDefault, secondDefault)
 
     @Test
     fun `should find enum by filter`() = runBlocking {
@@ -138,7 +135,7 @@ class SearchInListTest : PostgresBased("plugin") {
             whatReturn = "to_jsonb(enum)",
             listWay = "'list'",
             listDescription = "items(\"num\" text, \"str\" text, \"enum\" text)",
-            where = "where str = '${second.str}'"
+            where = "where str = '${secondDefault.str}'"
         )
         assertEquals(listOf(EnumExample.SECOND), result)
     }
@@ -146,21 +143,18 @@ class SearchInListTest : PostgresBased("plugin") {
     @Disabled("not implement. Cannot deserialize to default value")
     @Test
     fun `should find default value by filter`() = runBlocking {
-        agentStore.store(
-            ListWithDefaults(id = "some-id",
-                list = defaults)
-        )
+        agentStore.store(ListWithDefaults(id = "some-id", list = defaults))
         val result = agentStore.findInList<ListWithDefaults, Int>(
             whatReturn = "to_jsonb(num)",
             listWay = "'list'",
-            listDescription = "items(\"num\" text, \"str\" text, \"enum\" text)",
-            where = "where str = '${second.str}'"
+            listDescription = "items(\"num\" int, \"str\" text, \"enum\" text)",
+            where = "where str = '${secondDefault.str}'"
         )
-        assertEquals(listOf(second.num), result)
+        assertEquals(listOf(secondDefault.num), result)
     }
 
     @Test
-    fun `should find string by field which has default values`() = runBlocking {
+    fun `should find strings by field which has default values`() = runBlocking {
         agentStore.store(
             ListWithDefaults(id = "some-id",
                 list = defaults)
@@ -171,24 +165,20 @@ class SearchInListTest : PostgresBased("plugin") {
             listDescription = "items(\"num\" int, \"str\" text, \"enum\" text)",
             where = "where num is null"
         )
-        assertEquals(listOf(second.str), result)
+        assertEquals(listOf(secondDefault.str), result)
     }
 
-    @Disabled("not implement. find null values which is not deserialized. possible solution: https://dba.stackexchange.com/questions/197256/equivalent-to-json-strip-nulls-for-postgres-9-4")
     @Test
     fun `should find objects by field which has default values`() = runBlocking {
-        agentStore.store(
-            ListWithDefaults(id = "some-id",
-                list = defaults)
-        )
+        agentStore.store(ListWithDefaults(id = "some-id", list = defaults))
         val result = agentStore.findInList<ListWithDefaults, AllDefaultPayload>(
             whatReturn = "to_jsonb(items)",
             listWay = "'list'",
             listDescription = "items(\"num\" int, \"str\" text, \"enum\" text)",
             where = "where num is null"
         )
-        assertEquals(listOf(second), result)
-        assertEquals(second.num, result.first().num)
+        assertEquals(listOf(secondDefault), result)
+        assertEquals(secondDefault.num, result.first().num)
     }
 }
 

@@ -23,6 +23,7 @@ import kotlin.reflect.full.*
 
 val json = Json {
     allowStructuredMapKeys = true
+    coerceInputValues = true
 }
 
 inline fun <reified T : Any> idPair(any: T): Pair<String?, Any?> {
