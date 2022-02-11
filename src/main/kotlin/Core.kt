@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@file:Suppress("CovariantEquals", "BlockingMethodInNonBlockingContext")
+@file:Suppress("CovariantEquals", "BlockingMethodInNonBlockingContext", "NOTHING_TO_INLINE")
 
 package com.epam.dsm
 
@@ -186,7 +186,7 @@ suspend inline fun <reified T : Any> Transaction.findById(
 inline fun <reified T : Any> findByIds(
     ids: Collection<T>,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>
+    elementSerializer: KSerializer<T>,
 ): Iterable<T> = transaction {
     val entities: MutableList<T> = mutableListOf()
     if (ids.isEmpty()) return@transaction entities
@@ -266,7 +266,7 @@ inline fun <reified T : Any> storeCollection(
     collection: Iterable<T>,
     parentId: Int?,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>
+    elementSerializer: KSerializer<T>,
 ): Unit = transaction {
     val schema = connection.schema
     val tableName = runBlocking {

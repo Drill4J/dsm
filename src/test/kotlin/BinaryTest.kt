@@ -21,6 +21,7 @@ import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import org.jetbrains.exposed.sql.transactions.*
+import kotlin.random.Random
 import kotlin.test.*
 
 class BinaryTest : PostgresBased(schema) {
@@ -53,7 +54,7 @@ class BinaryTest : PostgresBased(schema) {
         val id = "id"
         val binary = byteArrayOf(-48, -94, -47, -117, 32, -48, -65, -48, -72, -48, -76, -48, -66, -47, -128, 33, 33)
         transaction {
-            putBinary(id, binary)
+            storeBinary(id, binary)
         }
         val actual = transaction {
             getBinaryAsStream(id)
@@ -81,5 +82,24 @@ class BinaryTest : PostgresBased(schema) {
         assertEquals(2, storeClient.getAll<BinaryClass>().size)
         assertEquals(1, newDb.getAll<BinaryClass>().size)
     }
+
+
+    @Test
+    fun `store classBytes`() = runBlocking {
+        val data = CodeData("ID", (1..200).map { Random.nextBytes(100) })
+        storeClient.store(data)
+        val storedData = storeClient.findById<CodeData>("ID")!!
+        assertEquals(
+            data.classBytes.joinToString { it.contentToString() },
+            storedData.classBytes.joinToString { it.contentToString() }
+        )
+    }
+
+    @Serializable
+    data class CodeData(
+        @Id
+        val id: String,
+        val classBytes: List<ByteArray>,
+    )
 
 }

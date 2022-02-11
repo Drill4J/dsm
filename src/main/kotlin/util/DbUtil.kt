@@ -17,11 +17,17 @@
 
 package com.epam.dsm.util
 
+import com.epam.dsm.*
+import com.epam.dsm.serializer.*
 import com.github.luben.zstd.*
+import com.zaxxer.hikari.pool.*
+import kotlinx.coroutines.*
 import mu.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.*
 import java.io.*
 import java.sql.*
+import java.util.*
 
 val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
@@ -42,13 +48,39 @@ fun Transaction.createBinaryTable() {
     commit()
 }
 
-fun Transaction.putBinary(id: String, value: ByteArray) {
+fun Transaction.storeBinary(id: String, value: ByteArray) {
     val prepareStatement = connection.prepareStatement("INSERT INTO BINARYA VALUES ('$id', ?)", false)
     prepareStatement[1] = Zstd.compress(value)
     prepareStatement.executeUpdate()
 }
 
+inline fun storeBinaryCollection(
+    collection: Iterable<ByteArray>,
+    parentId: Int?,
+): Unit = transaction {
+    runBlocking {
+        createTableIfNotExists(connection.schema) {
+            createBinaryTable()
+        }
+    }
+    val statement = connection.prepareStatement("INSERT INTO BINARYA VALUES (?, ?)", false)
+    collection.forEachIndexed { index, value ->
+        statement[1] = elementId(index, parentId)
+        statement[2] = Zstd.compress(value)
+        statement.addBatch()
+        if (index % DSM_FETCH_AND_PUSH_LIMIT == 0) {
+            statement.executeBatch()
+        }
+    }
+    statement.executeBatch()
+}
+
 fun Transaction.getBinary(id: String): ByteArray {
+    runBlocking {
+        createTableIfNotExists(connection.schema) {
+            createBinaryTable()
+        }
+    }
     val prepareStatement = connection.prepareStatement(
         "SELECT BINARYA FROM BINARYA WHERE id = '$id'",
         false
@@ -58,6 +90,28 @@ fun Transaction.getBinary(id: String): ByteArray {
         val bytes = executeQuery.getBytes(1)
         Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt())
     } else byteArrayOf() //todo or throw error?
+}
+
+fun getBinaryCollection(ids: Collection<String>): Collection<ByteArray> = transaction {
+    val entities = mutableListOf<ByteArray>()
+    if (ids.isEmpty()) return@transaction entities
+    val schema = connection.schema
+    runBlocking {
+        createTableIfNotExists(schema) {
+            createBinaryTable()
+        }
+    }
+    val idString = ids.joinToString { "'$it'" }
+    val stm = "SELECT BINARYA FROM BINARYA WHERE ID in ($idString)"
+    val statement = (connection.connection as HikariProxyConnection).createStatement()
+    statement.fetchSize = DSM_FETCH_AND_PUSH_LIMIT
+    statement.executeQuery(stm).let { rs ->
+        while (rs.next()) {
+            val bytes = rs.getBytes(1)
+            entities.add(Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt()))
+        }
+    }
+    return@transaction entities
 }
 
 fun Transaction.getBinaryAsStream(id: String): InputStream {
