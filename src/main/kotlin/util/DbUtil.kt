@@ -27,7 +27,6 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.*
 import java.io.*
 import java.sql.*
-import java.util.*
 
 val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
@@ -49,13 +48,16 @@ fun Transaction.createBinaryTable() {
 }
 
 fun Transaction.storeBinary(id: String, value: ByteArray) {
-    val prepareStatement = connection.prepareStatement("INSERT INTO BINARYA VALUES ('$id', ?)", false)
+    val prepareStatement = connection.prepareStatement("""
+        |INSERT INTO BINARYA VALUES ('$id', ?)
+        |ON CONFLICT (id) DO UPDATE SET BINARYA = excluded.BINARYA
+    """.trimMargin(), false)
     prepareStatement[1] = Zstd.compress(value)
     prepareStatement.executeUpdate()
 }
 
-inline fun storeBinaryCollection(
-    collection: Iterable<ByteArray>,
+fun storeBinaryCollection(
+    bytes: Iterable<ByteArray>,
     parentId: Int?,
 ): Unit = transaction {
     runBlocking {
@@ -63,13 +65,18 @@ inline fun storeBinaryCollection(
             createBinaryTable()
         }
     }
-    val statement = connection.prepareStatement("INSERT INTO BINARYA VALUES (?, ?)", false)
-    collection.forEachIndexed { index, value ->
-        statement[1] = elementId(index, parentId)
-        statement[2] = Zstd.compress(value)
+    val statement = (connection.connection as HikariProxyConnection).prepareStatement("""
+        |INSERT INTO BINARYA VALUES (?, ?)
+        |ON CONFLICT (id) DO UPDATE SET BINARYA = excluded.BINARYA
+    """.trimMargin())
+    bytes.forEachIndexed { index, value ->
+        statement.setString(1, elementId(index, parentId))
+        statement.setBytes(2, Zstd.compress(value))
         statement.addBatch()
-        if (index % DSM_FETCH_AND_PUSH_LIMIT == 0) {
+        statement.clearParameters()
+        if (index % DSM_PUSH_LIMIT == 0) {
             statement.executeBatch()
+            statement.clearBatch()
         }
     }
     statement.executeBatch()
@@ -104,7 +111,7 @@ fun getBinaryCollection(ids: Collection<String>): Collection<ByteArray> = transa
     val idString = ids.joinToString { "'$it'" }
     val stm = "SELECT BINARYA FROM BINARYA WHERE ID in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).createStatement()
-    statement.fetchSize = DSM_FETCH_AND_PUSH_LIMIT
+    statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery(stm).let { rs ->
         while (rs.next()) {
             val bytes = rs.getBytes(1)

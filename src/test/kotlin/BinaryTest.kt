@@ -86,13 +86,12 @@ class BinaryTest : PostgresBased(schema) {
 
     @Test
     fun `store classBytes`() = runBlocking {
-        val data = CodeData("ID", (1..200).map { Random.nextBytes(100) })
+        val data = CodeData("ID", (1..1000).map { Random.nextBytes(200) })
         storeClient.store(data)
         val storedData = storeClient.findById<CodeData>("ID")!!
-        assertEquals(
-            data.classBytes.joinToString { it.contentToString() },
-            storedData.classBytes.joinToString { it.contentToString() }
-        )
+        data.classBytes.forEach { bytes ->
+            assertNotNull(storedData.classBytes.find { bytes.contentToString() == it.contentToString() })
+        }
     }
 
     @Serializable

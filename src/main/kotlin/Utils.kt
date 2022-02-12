@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@file:Suppress("NOTHING_TO_INLINE", "UNCHECKED_CAST")
-
 package com.epam.dsm
 
 import com.epam.dsm.serializer.*
@@ -50,12 +48,15 @@ fun <T : Any> KClass<T>.dsmSerializer(
     parentId: Int? = null,
 ): KSerializer<T> = DsmSerializer(this.serializer(), classLoader, parentId)
 
+@Suppress("NOTHING_TO_INLINE", "UNCHECKED_CAST")
 inline fun <T> unchecked(any: Any) = any as T
 
 fun elementId(index: Int, parentId: Int?) = "$parentId$index"
 
+@Suppress("NOTHING_TO_INLINE")
 internal inline fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
 
+@Suppress("NOTHING_TO_INLINE")
 internal inline fun SerialDescriptor.isCollectionElementType(
     kClass: KClass<*>,
 ) = serialName == kClass.qualifiedName
