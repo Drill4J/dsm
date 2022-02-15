@@ -26,7 +26,8 @@ import kotlinx.serialization.internal.*
 import org.jetbrains.exposed.sql.transactions.*
 import java.util.*
 
-val DSM_FETCH_AND_PUSH_LIMIT = System.getenv("DSM_FETCH_AND_PUSH_LIMIT")?.toIntOrNull() ?: 10_000
+val DSM_PUSH_LIMIT = System.getenv("DSM_PUSH_LIMIT")?.toIntOrNull() ?: 3_000
+val DSM_FETCH_LIMIT = System.getenv("DSM_FETCH_LIMIT")?.toIntOrNull() ?: 10_000
 
 object BinarySerializer : KSerializer<ByteArray> {
 

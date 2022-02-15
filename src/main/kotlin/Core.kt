@@ -196,9 +196,9 @@ inline fun <reified T : Any> findByIds(
     }
     val idString = ids.joinToString { "'$it'" }
     val stm = "select JSON_BODY FROM $tableName WHERE ID in ($idString)"
-    val statement = (connection.connection as HikariProxyConnection).createStatement()
-    statement.fetchSize = DSM_FETCH_AND_PUSH_LIMIT
-    statement.executeQuery(stm).let { rs ->
+    val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
+    statement.fetchSize = DSM_FETCH_LIMIT
+    statement.executeQuery().let { rs ->
         while (rs.next()) {
             val element = json.decodeFromStream(elementSerializer, rs.getBinaryStream(1))
             entities.add(element)
@@ -284,22 +284,19 @@ inline fun <reified T : Any> storeCollection(
         }
         file.inputStream().reader().use {
             transaction {
-                val statement = (connection.connection as HikariProxyConnection).createStatement()
+                val stmt = """
+                        |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES (?, CAST(? as jsonb))
+                        |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+                    """.trimMargin()
+                val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
                 sizes.forEachIndexed { index, size ->
-                    val value = readerToString(it, size)
-                    val stmt =
-                        """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES ('${
-                            elementId(
-                                index,
-                                parentId
-                            )
-                        }', '$value')
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
-        """.trimMargin()
-                    statement.addBatch(stmt)
-                    if (index % DSM_FETCH_AND_PUSH_LIMIT == 0) {
+                    statement.setString(1, elementId(index, parentId))
+                    statement.setCharacterStream(2, it, size)
+                    statement.addBatch()
+                    statement.clearParameters()
+                    if (index % DSM_PUSH_LIMIT == 0) {
                         statement.executeBatch()
+                        statement.clearBatch()
                     }
                 }
                 statement.executeBatch()
