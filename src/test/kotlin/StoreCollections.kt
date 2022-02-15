@@ -48,6 +48,20 @@ class StoreCollections : PostgresBased("store_collections") {
     }
 
     @Test
+    fun `should store element of collection with reserved symbols`(): Unit = runBlocking {
+        val id = UUID.randomUUID().toString()
+        val testName = "Can't store this test name \\b \\f \\n \\r \\t \\7 \\85h \\u88 U&'d\\0061t\\+000061' \$\$Dianne's horse\$\$ + - * / < > = ~ ! @ # % ^ & | ` ?"
+        val data = Data("classID", "className", testName)
+        val objWithList = ObjectWithList(id, listOf(data))
+        assertDoesNotThrow {
+            runBlocking { storeClient.store(objWithList) }
+        }
+        val storedObject = storeClient.findById<ObjectWithList>(id)
+        assertNotNull(storedObject)
+        assertEquals(testName, storedObject.data.first().testName)
+    }
+
+    @Test
     fun `should store object with map`(): Unit = runBlocking {
         val data = mapOf("someId" to Data("classID", "className", "testName"))
         storeClient.store(ObjectWithMap("id", data))
