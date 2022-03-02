@@ -48,9 +48,15 @@ fun <T : Any> KClass<T>.dsmSerializer(
     parentId: Int? = null,
 ): KSerializer<T> = DsmSerializer(this.serializer(), classLoader, parentId)
 
-@Suppress("UNCHECKED_CAST")
-fun <T> unchecked(any: Any) = any as T
+@Suppress("NOTHING_TO_INLINE", "UNCHECKED_CAST")
+inline fun <T> unchecked(any: Any) = any as T
 
 fun elementId(index: Int, parentId: Int?) = "$parentId$index"
 
-fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
+@Suppress("NOTHING_TO_INLINE")
+internal inline fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
+
+@Suppress("NOTHING_TO_INLINE")
+internal inline fun SerialDescriptor.isCollectionElementType(
+    kClass: KClass<*>,
+) = serialName == kClass.qualifiedName
