@@ -48,10 +48,12 @@ fun Transaction.createBinaryTable() {
 }
 
 fun Transaction.storeBinary(id: String, value: ByteArray) {
-    val prepareStatement = connection.prepareStatement("""
+    val prepareStatement = connection.prepareStatement(
+        """
         |INSERT INTO BINARYA VALUES ('$id', ?)
         |ON CONFLICT (id) DO UPDATE SET BINARYA = excluded.BINARYA
-    """.trimMargin(), false)
+    """.trimMargin(), false
+    )
     prepareStatement[1] = Zstd.compress(value)
     prepareStatement.executeUpdate()
 }
@@ -59,18 +61,19 @@ fun Transaction.storeBinary(id: String, value: ByteArray) {
 fun storeBinaryCollection(
     bytes: Iterable<ByteArray>,
     parentId: Int?,
+    parentIndex: Int?
 ): Unit = transaction {
     runBlocking {
-        createTableIfNotExists(connection.schema) {
-            createBinaryTable()
-        }
+        createTableIfNotExists<Any>(connection.schema) { createBinaryTable() }
     }
-    val statement = (connection.connection as HikariProxyConnection).prepareStatement("""
+    val statement = (connection.connection as HikariProxyConnection).prepareStatement(
+        """
         |INSERT INTO BINARYA VALUES (?, ?)
         |ON CONFLICT (id) DO UPDATE SET BINARYA = excluded.BINARYA
-    """.trimMargin())
+    """.trimMargin()
+    )
     bytes.forEachIndexed { index, value ->
-        statement.setString(1, elementId(index, parentId))
+        statement.setString(1, elementId(parentId, parentIndex, index))
         statement.setBytes(2, Zstd.compress(value))
         statement.addBatch()
         statement.clearParameters()
@@ -84,7 +87,7 @@ fun storeBinaryCollection(
 
 fun Transaction.getBinary(id: String): ByteArray {
     runBlocking {
-        createTableIfNotExists(connection.schema) {
+        createTableIfNotExists<Any>(connection.schema) {
             createBinaryTable()
         }
     }
@@ -99,17 +102,16 @@ fun Transaction.getBinary(id: String): ByteArray {
     } else byteArrayOf() //todo or throw error?
 }
 
-fun getBinaryCollection(ids: Collection<String>): Collection<ByteArray> = transaction {
+fun getBinaryCollection(id: String): Collection<ByteArray> = transaction {
     val entities = mutableListOf<ByteArray>()
-    if (ids.isEmpty()) return@transaction entities
+    if (id.isBlank()) return@transaction entities
     val schema = connection.schema
     runBlocking {
-        createTableIfNotExists(schema) {
+        createTableIfNotExists<Any>(schema) {
             createBinaryTable()
         }
     }
-    val idString = ids.joinToString { "'$it'" }
-    val stm = "SELECT BINARYA FROM BINARYA WHERE ID in ($idString)"
+    val stm = "SELECT BINARYA FROM BINARYA WHERE ID ~ '^$id[0-9]+\$'"
     val statement = (connection.connection as HikariProxyConnection).createStatement()
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery(stm).let { rs ->

@@ -36,7 +36,7 @@ object BinarySerializer : KSerializer<ByteArray> {
         transaction {
             val schema = connection.schema
             runBlocking {
-                createTableIfNotExists(schema) {
+                createTableIfNotExists<Any>(schema) {
                     createBinaryTable()
                 }
             }
@@ -66,6 +66,7 @@ class DsmSerializer<T>(
     private val serializer: KSerializer<T>,
     val classLoader: ClassLoader,
     val parentId: Int? = null,
+    var parentIndex: Int? = null,
 ) : KSerializer<T> by serializer {
 
     override fun serialize(encoder: Encoder, value: T) {
@@ -96,41 +97,64 @@ class DsmSerializer<T>(
             private val compositeEncoder: CompositeEncoder,
         ) : CompositeEncoder by compositeEncoder {
 
+            @Suppress("UNCHECKED_CAST")
             override fun <T> encodeSerializableElement(
                 descriptor: SerialDescriptor,
                 index: Int,
                 serializer: SerializationStrategy<T>,
                 value: T,
             ) {
+                parentIndex = index
                 when (value) {
-                    is Map<*, *>, is ByteArray, is Enum<*> -> {
-                        //TODO EPMDJ-9884 Optimize map storing
+                    is ByteArray, is Enum<*> -> {
                         //TODO EPMDJ-9885 Get rid of the ByteArraySerializer
                         compositeEncoder.encodeSerializableElement(descriptor, index, serializer, value)
                     }
+                    is Map<*, *> -> {
+                        val mapLikeSerializer = serializer as MapLikeSerializer<*, *, *, *>
+                        val keyDescriptor = mapLikeSerializer.keySerializer.descriptor
+                        val valueDescriptor = mapLikeSerializer.valueSerializer.descriptor
+
+                        if (!keyDescriptor.isPrimitiveKind() || !valueDescriptor.isPrimitiveKind()) {
+                            val clazz = classLoader.run { getClass(keyDescriptor) to getClass(valueDescriptor) }
+                            val entrySerializer = mapLikeSerializer.run {
+                                keySerializer to valueSerializer
+                            } as EntrySerializer<Any, Any>
+                            storeMap(value, parentId, parentIndex, clazz, entrySerializer)
+                            compositeEncoder.encodeSerializableElement(
+                                descriptor,
+                                index,
+                                String.serializer(),
+                                elementId(parentId, parentIndex)
+                            )
+                        } else compositeEncoder.encodeSerializableElement(
+                            descriptor,
+                            index,
+                            serializer as KSerializer<T>,
+                            value
+                        )
+                    }
                     is Collection<*> -> {
                         val elementDescriptor = serializer.descriptor.getElementDescriptor(0)
-                        if (value.isEmpty() || elementDescriptor.kind is PrimitiveKind) {
+                        if (elementDescriptor.isPrimitiveKind()) {
                             return compositeEncoder.encodeSerializableElement(descriptor, index, serializer, value)
                         }
                         if (elementDescriptor.isCollectionElementType(ByteArray::class)) {
-                            storeBinaryCollection(unchecked(value.filterNotNull()), parentId)
+                            storeBinaryCollection(unchecked(value.filterNotNull()), parentId, parentIndex)
                         } else {
-                            val clazz = classLoader.loadClass(elementDescriptor.serialName).kotlin
-
-                            @Suppress("UNCHECKED_CAST")
-                            val elementSerializer = clazz.dsmSerializer(classLoader, parentId) as KSerializer<Any>
-                            storeCollection(value.filterNotNull(), parentId, clazz, elementSerializer)
+                            val clazz = classLoader.getClass(elementDescriptor)
+                            val elementSerializer = clazz.dsmSerializer(classLoader, parentId)
+                            storeCollection(value, parentId, parentIndex, clazz, elementSerializer)
                         }
                         return compositeEncoder.encodeSerializableElement(
                             descriptor,
                             index,
-                            ListSerializer(String.serializer()),
-                            value.mapIndexed { i, _ -> elementId(i, parentId) }
+                            String.serializer(),
+                            elementId(parentId, parentIndex)
                         )
                     }
                     else -> {
-                        val strategy = DsmSerializer(serializer as KSerializer<T>, classLoader, parentId)
+                        val strategy = DsmSerializer(serializer as KSerializer<T>, classLoader, parentId, index)
                         compositeEncoder.encodeSerializableElement(descriptor, index, strategy, value)
                     }
                 }
@@ -144,8 +168,11 @@ class DsmSerializer<T>(
             return DsmCompositeDecoder(decoder.beginStructure(descriptor))
         }
 
-        inner class DsmCompositeDecoder(private val compositeDecoder: CompositeDecoder) :
-            CompositeDecoder by compositeDecoder {
+        inner class DsmCompositeDecoder(
+            private val compositeDecoder: CompositeDecoder
+        ) : CompositeDecoder by compositeDecoder {
+
+            @Suppress("UNCHECKED_CAST")
             override fun <T> decodeSerializableElement(
                 descriptor: SerialDescriptor,
                 index: Int,
@@ -153,27 +180,43 @@ class DsmSerializer<T>(
                 previousValue: T?,
             ): T {
                 return when (deserializer) {
-                    ByteArraySerializer(), is MapLikeSerializer<*, *, *, *> -> {
+                    ByteArraySerializer() -> {
                         compositeDecoder.decodeSerializableElement(descriptor, index, deserializer)
+                    }
+                    is MapLikeSerializer<*, *, *, *> -> {
+                        val keyDescriptor = deserializer.keySerializer.descriptor
+                        val valueDescriptor = deserializer.valueSerializer.descriptor
+                        if (!keyDescriptor.isPrimitiveKind() || !valueDescriptor.isPrimitiveKind()) {
+                            val id = decoder.decodeSerializableValue(String.serializer())
+
+                            val clazz = classLoader.run { getClass(keyDescriptor) to getClass(valueDescriptor) }
+                            val entrySerializer = deserializer.run {
+                                keySerializer to valueSerializer
+                            } as EntrySerializer<Any, Any>
+                            val map = loadMap(id, clazz, entrySerializer)
+                            unchecked(map)
+                        } else compositeDecoder.decodeSerializableElement(
+                            descriptor,
+                            index,
+                            deserializer as KSerializer<T>
+                        )
                     }
                     is AbstractCollectionSerializer<*, *, *> -> {
                         val elementDescriptor = deserializer.descriptor.getElementDescriptor(0)
-                        if (elementDescriptor.kind is PrimitiveKind) {
+                        if (elementDescriptor.isPrimitiveKind()) {
                             return compositeDecoder.decodeSerializableElement(
                                 descriptor,
                                 index,
                                 deserializer as KSerializer<T>
                             )
                         }
-                        val ids = decoder.decodeSerializableValue(ListSerializer(String.serializer()))
+                        val id = decoder.decodeSerializableValue(String.serializer())
                         if (elementDescriptor.isCollectionElementType(ByteArray::class)) {
-                            unchecked(getBinaryCollection(ids).parseCollection(deserializer))
+                            unchecked(getBinaryCollection(id).parseCollection(deserializer))
                         } else {
-                            val elementClass = classLoader.loadClass(elementDescriptor.serialName).kotlin
-
-                            @Suppress("UNCHECKED_CAST")
-                            val kSerializer = elementClass.dsmSerializer(classLoader) as KSerializer<Any>
-                            val list = findByIds(ids, elementClass, kSerializer)
+                            val elementClass = classLoader.getClass(elementDescriptor)
+                            val kSerializer = elementClass.dsmSerializer(classLoader)
+                            val list = loadCollection(id, elementClass, kSerializer)
                             unchecked(list.parseCollection(deserializer))
                         }
                     }

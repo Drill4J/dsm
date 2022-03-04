@@ -50,7 +50,8 @@ class StoreCollections : PostgresBased("store_collections") {
     @Test
     fun `should store element of collection with reserved symbols`(): Unit = runBlocking {
         val id = UUID.randomUUID().toString()
-        val testName = "Can't store this test name \\b \\f \\n \\r \\t \\7 \\85h \\u88 U&'d\\0061t\\+000061' \$\$Dianne's horse\$\$ + - * / < > = ~ ! @ # % ^ & | ` ?"
+        val testName =
+            "Can't store this test name \\b \\f \\n \\r \\t \\7 \\85h \\u88 U&'d\\0061t\\+000061' \$\$Dianne's horse\$\$ + - * / < > = ~ ! @ # % ^ & | ` ?"
         val data = Data("classID", "className", testName)
         val objWithList = ObjectWithList(id, listOf(data))
         assertDoesNotThrow {
@@ -61,14 +62,6 @@ class StoreCollections : PostgresBased("store_collections") {
         assertEquals(testName, storedObject.data.first().testName)
     }
 
-    @Test
-    fun `should store object with map`(): Unit = runBlocking {
-        val data = mapOf("someId" to Data("classID", "className", "testName"))
-        storeClient.store(ObjectWithMap("id", data))
-        val stored = storeClient.findById<ObjectWithMap>("id")
-        assertNotNull(stored)
-        assertTrue { stored.data.any() }
-    }
 
     @Test
     fun `should store object with inner lists`(): Unit = runBlocking {
@@ -95,24 +88,33 @@ class StoreCollections : PostgresBased("store_collections") {
         assertTrue { storedObject.data.any() }
         assertTrue { storedObject.data.first().classId == "класс" }
     }
+
+    @Test
+    fun `should be no conflict - two lists`(): Unit = runBlocking {
+        val id = "id"
+        val data = (0 until 100).map {
+            Data("classID$it", "className$it", "testName$it")
+        }
+        val objectWithList = ObjectWithList(id, data.subList(0, 50), data.subList(50, 100))
+        storeClient.store(objectWithList)
+        val stored = storeClient.findById<ObjectWithList>(id)
+        assertNotNull(stored)
+        assertTrue { stored.data.containsAll(objectWithList.data) }
+        assertTrue { stored.anotherData.containsAll(objectWithList.anotherData) }
+    }
 }
 
 @Serializable
 data class ObjectWithInnerList(
     @Id val id: String,
-    val data: List<ObjectWithList>
-)
-
-@Serializable
-data class ObjectWithMap(
-    @Id val id: String,
-    val data: Map<String, Data>
+    val data: List<ObjectWithList>,
 )
 
 @Serializable
 data class ObjectWithList(
     @Id val id: String,
-    val data: List<Data>
+    val data: List<Data>,
+    val anotherData: List<Data> = emptyList()
 )
 
 @Serializable

@@ -13,12 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+@file:Suppress("NOTHING_TO_INLINE")
+
 package com.epam.dsm
 
 import com.epam.dsm.serializer.*
 import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.internal.*
 import kotlinx.serialization.json.*
+import java.io.*
 import java.util.*
 import kotlin.reflect.*
 import kotlin.reflect.full.*
@@ -46,17 +50,24 @@ fun Any.encodeId(): String = when (this) {
 fun <T : Any> KClass<T>.dsmSerializer(
     classLoader: ClassLoader,
     parentId: Int? = null,
-): KSerializer<T> = DsmSerializer(this.serializer(), classLoader, parentId)
+    parentIndex: Int? = null
+): KSerializer<T> = DsmSerializer(this.serializer(), classLoader, parentId, parentIndex)
 
-@Suppress("NOTHING_TO_INLINE", "UNCHECKED_CAST")
+@Suppress("UNCHECKED_CAST")
 inline fun <T> unchecked(any: Any) = any as T
 
-fun elementId(index: Int, parentId: Int?) = "$parentId$index"
+inline fun elementId(
+    parentId: Int?,
+    parentIndex: Int?,
+    index: Int = -1
+) = "${parentId}_${parentIndex}_${index.takeIf { it >= 0 } ?: ""}"
 
-@Suppress("NOTHING_TO_INLINE")
-internal inline fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
+inline fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
 
-@Suppress("NOTHING_TO_INLINE")
 internal inline fun SerialDescriptor.isCollectionElementType(
     kClass: KClass<*>,
 ) = serialName == kClass.qualifiedName
+
+inline fun SerialDescriptor.isPrimitiveKind() = kind is PrimitiveKind
+
+inline fun FileOutputStream.size() = channel.size()

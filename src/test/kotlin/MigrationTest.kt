@@ -72,7 +72,7 @@ class MigrationTest : PostgresBased("migration") {
 
     @Test
     fun `should remove field when has migration script`() = runBlocking {
-        val tableName = RemoveField::class.createTableIfNotExists(storeClient.hikariConfig.schema)
+        val tableName = createTableIfNotExists<RemoveField>(storeClient.hikariConfig.schema)
         val id = "id"
         transaction {
             storeAsString(RemoveFieldOld(id, "this field will be removed in migration"), tableName)
@@ -96,7 +96,7 @@ class MigrationTest : PostgresBased("migration") {
 
     @Test
     fun `should rename field when has migration script`() = runBlocking {
-        val tableName = RenameField::class.createTableIfNotExists(storeClient.hikariConfig.schema)
+        val tableName = createTableIfNotExists<RenameField>(storeClient.hikariConfig.schema)
         val id = "id"
         val value = "this field will be renamed"
         transaction {
