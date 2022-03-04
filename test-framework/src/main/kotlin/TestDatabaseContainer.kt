@@ -33,6 +33,7 @@ class TestDatabaseContainer {
             PostgreSQLContainer<Nothing>("postgres:12").apply {
                 withExposedPorts(PostgreSQLContainer.POSTGRESQL_PORT)
                 waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\s", 2))
+                withUrlParam("reWriteBatchedInserts", "true")
                 start()
             }
 

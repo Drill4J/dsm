@@ -122,7 +122,7 @@ class StoreClient(val hikariConfig: HikariConfig) : AutoCloseable {
 
 suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
     val finalData = mutableListOf<T>()
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     val classLoader = T::class.java.classLoader
     execWrapper("select JSON_BODY FROM $tableName") { rs ->
         while (rs.next()) {
@@ -140,7 +140,7 @@ suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
 suspend inline fun <reified T : Any> Transaction.findBy(
     expression: Expr<T>.() -> Unit,
 ) = run {
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     val finalData = mutableListOf<T>()
     val classLoader = T::class.java.classLoader
     val sqlStatement = """
@@ -164,7 +164,7 @@ suspend inline fun <reified T : Any> Transaction.findById(
     id: Any,
 ): T? = run {
     var entity: T? = null
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     val classLoader = T::class.java.classLoader
     execWrapper("select JSON_BODY FROM $tableName WHERE ID='${id.hashCode()}'") { rs ->
         if (rs.next()) {
@@ -177,41 +177,17 @@ suspend inline fun <reified T : Any> Transaction.findById(
     entity
 }
 
-inline fun <reified T : Any> findByIds(
-    ids: Collection<T>,
-    elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>,
-): Iterable<T> = transaction {
-    val entities: MutableList<T> = mutableListOf()
-    if (ids.isEmpty()) return@transaction entities
-    val schema = connection.schema
-    val tableName = runBlocking {
-        elementClass.createTableIfNotExists(schema)
-    }
-    val idString = ids.joinToString { "'$it'" }
-    val stm = "select JSON_BODY FROM $tableName WHERE ID in ($idString)"
-    val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
-    statement.fetchSize = DSM_FETCH_LIMIT
-    statement.executeQuery().let { rs ->
-        while (rs.next()) {
-            val element = json.decodeFromStream(elementSerializer, rs.getBinaryStream(1))
-            entities.add(element)
-        }
-    }
-    return@transaction entities
-}
-
 suspend inline fun <reified T : Any> Transaction.deleteById(
     id: Any,
 ) {
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     execWrapper("DELETE FROM $tableName WHERE ID='${id.hashCode()}'") //todo use parameters to detect type
 }
 
 suspend inline fun <reified T : Any> Transaction.deleteBy(
     noinline expression: Expr<T>.() -> Unit,
 ) {
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     execWrapper(
         """
                     |DELETE FROM $tableName
@@ -221,14 +197,14 @@ suspend inline fun <reified T : Any> Transaction.deleteBy(
 }
 
 suspend inline fun <reified T : Any> Transaction.deleteAll() {
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     execWrapper("DELETE FROM $tableName")
 }
 
 suspend inline fun <reified T : Any> Transaction.store(any: T) {
     run {
         val schema = connection.schema
-        val tableName = T::class.createTableIfNotExists(schema)
+        val tableName = createTableIfNotExists<T>(schema)
         val measureTime = measureTime {
             if (T::class.annotations.any { it is StreamSerialization }) {
                 storeAsStream(any, tableName)
@@ -256,51 +232,11 @@ inline fun <reified T : Any> Transaction.storeAsString(
     stm.executeUpdate()
 }
 
-inline fun <reified T : Any> storeCollection(
-    collection: Iterable<T>,
-    parentId: Int?,
-    elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>,
-): Unit = transaction {
-    val schema = connection.schema
-    val tableName = runBlocking {
-        elementClass.createTableIfNotExists(schema)
-    }
-    val file = File.createTempFile("prefix-", "-postfix") // TODO EPMDJ-9370 Remove file creating
-    try {
-        val sizes = mutableListOf<Int>()
-        file.outputStream().use {
-            collection.forEach { value ->
-                val json = json.encodeToString(elementSerializer, value)
-                sizes.add(json.length)
-                it.write(json.toByteArray())
-            }
-        }
-        file.inputStream().reader().use {
-            transaction {
-                val stmt = """
-                        |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES (?, CAST(? as jsonb))
-                        |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
-                    """.trimMargin()
-                val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
-                sizes.forEachIndexed { index, size ->
-                    statement.setString(1, elementId(index, parentId))
-                    statement.setCharacterStream(2, it, size)
-                    statement.addBatch()
-                    statement.clearParameters()
-                    if (index % DSM_PUSH_LIMIT == 0) {
-                        statement.executeBatch()
-                        statement.clearBatch()
-                    }
-                }
-                statement.executeBatch()
-            }
-        }
-    } finally {
-        file.delete()
-    }
-}
-
+/**
+ * Serialization of large objects takes a lot of memory. So we needed to use stream serialization.
+ * But Json needed an OutputStream and an InputStream for Statement.
+ * So we created the layer from the file
+ */
 inline fun <reified T : Any> Transaction.storeAsStream(
     any: T,
     tableName: String,
@@ -334,22 +270,12 @@ val mutex = Mutex()
  * Retrieving a table name from a given class, when the table doesn't exist, creates it.
  * By default, creates json table.
  */
-suspend fun KClass<*>.createTableIfNotExists(
+suspend inline fun <reified T : Any> createTableIfNotExists(
     schema: String,
-    createTable: Transaction.(String) -> Unit = { tableName ->
-        createJsonTable(tableName)
+    tableName: String = T::class.tableName(),
+    crossinline createTable: Transaction.(String) -> Unit = { table ->
+        createJsonTable(table)
     },
-): String {
-    val tableName = camelRegex.replace(this.simpleName!!) {
-        "_${it.value}"
-    }.lowercase(Locale.getDefault())
-    return createTableIfNotExists(schema, tableName, createTable)
-}
-
-suspend inline fun createTableIfNotExists(
-    schema: String,
-    tableName: String = "",
-    noinline createTable: Transaction.(String) -> Unit,
 ): String {
     val tableKey = "$schema.$tableName"
     if (!createdTables.contains(tableKey)) {
@@ -365,3 +291,9 @@ suspend inline fun createTableIfNotExists(
     }
     return tableName
 }
+
+fun KClass<*>.tableName() = camelRegex.replace(simpleName!!) {
+    "_${it.value}"
+}.lowercase(Locale.getDefault())
+
+fun EntryClass<*, *>.tableName() = "${first.simpleName}_to_${second.simpleName}"
