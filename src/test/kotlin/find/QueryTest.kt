@@ -17,6 +17,7 @@ package com.epam.dsm.find
 
 import com.epam.dsm.*
 import com.epam.dsm.common.*
+import com.epam.dsm.common.PrepareData.Companion.complexObject
 import com.epam.dsm.common.PrepareData.Companion.payloadWithIdList
 import com.epam.dsm.common.PrepareData.Companion.storeLists
 import com.epam.dsm.common.PrepareData.Companion.setPayload
@@ -52,6 +53,13 @@ class QueryTest : PostgresBased("query") {
     fun `should find string values when pass the params`() = runBlocking {
         val query: SearchQuery<PayloadWithIdList> = storeClient.findBy { PayloadWithIdList::id eq "1" }
         assertEquals(listOf("42"), query.getStrings(PayloadWithIdList::num.name))
+    }
+
+    @Test
+    fun `should find string values when pass the inner object`() = runBlocking {
+        storeClient.store(complexObject)
+        val query: SearchQuery<ComplexObject> = storeClient.findBy { ComplexObject::id eq "str" }
+        assertEquals(listOf("12"), query.getStrings(FieldPath(ComplexObject::blink.name, SubObject::int.name)))
     }
 
     @Test
