@@ -93,10 +93,14 @@ suspend inline fun <reified T : Any, reified R : Any> SearchQuery<T>.getAndMap(f
 }
 
 /**
- * @return List<String>, R - field which map
+ * @return List<String> - cast any type to String
  */
 suspend inline fun <reified T : Any> SearchQuery<T>.getStrings(field: String): List<String> = run {
-    execute(FieldPath(field).extractText()) { rs, _ -> rs.getString(1) as String }
+    getStrings(FieldPath(field))
+}
+
+suspend inline fun <reified T : Any> SearchQuery<T>.getStrings(field: FieldPath): List<String> = run {
+    execute(field.extractText()) { rs, _ -> rs.getString(1) as String }
 }
 
 /**

@@ -222,7 +222,8 @@ inline fun <reified T : Any> Transaction.storeAsString(
             |ON CONFLICT ($ID_COLUMN) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
-    stm[1] = json.encodeToString(T::class.dsmSerializer(id, classLoader<T>()), any)
+    stm[1] = json.encodeToString(T::class.dsmSerializer(classLoader<T>(), id), any)
+    logger.debug { "insert: $stmt\nvalue: $any" }
     stm.executeUpdate()
 }
 
@@ -239,7 +240,7 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
     try {
         file.outputStream().use {
-            json.encodeToStream(T::class.dsmSerializer(id, classLoader<T>()), any, it)
+            json.encodeToStream(T::class.dsmSerializer(classLoader<T>(), id), any, it)
         }
         val stmt =
             """
