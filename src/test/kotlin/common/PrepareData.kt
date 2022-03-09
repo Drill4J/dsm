@@ -56,6 +56,10 @@ class PrepareData {
             store(payloadWithIdList)
             store(payloadWithIdList2)
         }
+
+        val last = Last(2.toByte())
+        val complexObject = ComplexObject("str", 'x', blink, EnumExample.SECOND, null)
+        val simpleObject = SimpleObject("id", "subStr", 12, last)
     }
 }
 

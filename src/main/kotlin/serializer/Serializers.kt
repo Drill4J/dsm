@@ -248,24 +248,21 @@ class DsmSerializer<T>(
 
 private fun Iterable<Any>.parseCollection(
     des: AbstractCollectionSerializer<*, *, *>,
-): Any = run {
-    firstOrNull()?.let { it::class.serializer() }?.let { serializer ->
-        when (des::class) {
-            ListSerializer(serializer)::class -> toMutableList()
-            SetSerializer(serializer)::class -> toMutableSet()
-            else -> TODO("not implemented yet")
-        }
-    } ?: this
+    serializer2: KSerializer<out Any>,
+): Any = when (des::class) {
+    ListSerializer(serializer2)::class -> toMutableList()
+    SetSerializer(serializer2)::class -> toMutableSet()
+    else -> TODO("not implemented yet")
 }
 
 inline fun <reified T : Any> dsmDecode(inputStream: InputStream, classLoader: ClassLoader): T = json.decodeFromStream(
-    T::class.dsmSerializer(classLoader = classLoader),
+    T::class.dsmSerializer(classLoader),
     inputStream
 )
 
 inline fun <reified T : Any> dsmDecode(inputJson: String, classLoader: ClassLoader): T =
     json.decodeFromString(
-        T::class.dsmSerializer(classLoader = classLoader),
+        T::class.dsmSerializer(classLoader),
         inputJson
     )
 
