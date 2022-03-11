@@ -323,5 +323,30 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertNull(storeClient.findById<StoreMe>("id2"))
         assertNotNull(storeClient.findById<MapField>("id3") != null)
     }
+
+    @Test
+    fun `should store and get empty set as default`() = runBlocking {
+        val expected = ClassWithSet("id")
+        storeClient.store(expected)
+        assertEquals(expected, storeClient.findById("id"))
+    }
+
+    @Test
+    fun `should store and get empty set`() = runBlocking {
+        val expected = ClassWithSet("id2", emptySet())
+        storeClient.store(expected)
+        assertEquals(expected, storeClient.findById("id2"))
+    }
+
 }
 
+@Serializable
+data class ClassWithSet(
+    @Id val id: String,
+    val set: Set<AnotherClass> = emptySet(),
+)
+
+@Serializable
+data class AnotherClass(
+    val something: String,
+)
