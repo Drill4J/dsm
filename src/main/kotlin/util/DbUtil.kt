@@ -18,28 +18,34 @@
 package com.epam.dsm.util
 
 import com.epam.dsm.*
-import com.epam.dsm.serializer.*
-import com.github.luben.zstd.*
-import com.zaxxer.hikari.pool.*
-import kotlinx.coroutines.*
+import kotlinx.serialization.*
+import kotlinx.serialization.descriptors.*
 import mu.*
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.*
-import java.io.*
 import java.sql.*
+import java.util.*
+import kotlin.reflect.*
 
-val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
+typealias PathToTable = Pair<String, String>
+typealias EntryDescriptor = Pair<SerialDescriptor, SerialDescriptor>
+
+internal val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
 val logger = KotlinLogging.logger {}
 
-fun Transaction.createJsonTable(tableName: String) {
+internal val uuid
+    get() = "${UUID.randomUUID()}"
+
+inline fun <reified T : Any> Transaction.createJsonTable(tableName: String) {
     execWrapper("""
         CREATE TABLE IF NOT EXISTS $tableName (
-            $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key, 
+            $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key,
             $PARENT_ID_COLUMN varchar(256), 
             $JSON_COLUMN jsonb
         );
-        """)
+        ${cascadeDeleteCollectionTrigger<T>(tableName)}
+   """
+    )
     commit()
 }
 
@@ -53,92 +59,9 @@ fun Transaction.createBinaryTable() {
     commit()
 }
 
-fun Transaction.storeBinary(id: String, value: ByteArray) {
-    val prepareStatement = connection.prepareStatement(
-        """
-        |INSERT INTO BINARYA VALUES ('$id', ?)
-        |ON CONFLICT (id) DO UPDATE SET BINARYA = excluded.BINARYA
-    """.trimMargin(), false
-    )
-    prepareStatement[1] = Zstd.compress(value)
-    prepareStatement.executeUpdate()
-}
-
-fun storeBinaryCollection(
-    bytes: Iterable<ByteArray>,
-    parentId: Int?,
-    parentIndex: Int?
-): Unit = transaction {
-    runBlocking {
-        createTableIfNotExists<Any>(connection.schema) { createBinaryTable() }
-    }
-    val statement = (connection.connection as HikariProxyConnection).prepareStatement(
-        """
-        |INSERT INTO BINARYA VALUES (?, ?)
-        |ON CONFLICT (id) DO UPDATE SET BINARYA = excluded.BINARYA
-    """.trimMargin()
-    )
-    bytes.forEachIndexed { index, value ->
-        statement.setString(1, elementId(parentId, parentIndex, index))
-        statement.setBytes(2, Zstd.compress(value))
-        statement.addBatch()
-        statement.clearParameters()
-        if (index % DSM_PUSH_LIMIT == 0) {
-            statement.executeBatch()
-            statement.clearBatch()
-        }
-    }
-    statement.executeBatch()
-}
-
-fun Transaction.getBinary(id: String): ByteArray {
-    runBlocking {
-        createTableIfNotExists<Any>(connection.schema) {
-            createBinaryTable()
-        }
-    }
-    val prepareStatement = connection.prepareStatement(
-        "SELECT BINARYA FROM BINARYA WHERE $ID_COLUMN = ${id.toQuotes()}",
-        false
-    )
-    val executeQuery = prepareStatement.executeQuery()
-    return if (executeQuery.next()) {
-        val bytes = executeQuery.getBytes(1)
-        Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt())
-    } else byteArrayOf() //todo or throw error?
-}
-
-fun getBinaryCollection(id: String): Collection<ByteArray> = transaction {
-    val entities = mutableListOf<ByteArray>()
-    if (id.isBlank()) return@transaction entities
-    val schema = connection.schema
-    runBlocking {
-        createTableIfNotExists<Any>(schema) {
-            createBinaryTable()
-        }
-    }
-    val stm = "SELECT BINARYA FROM BINARYA WHERE ID ~ '^$id[0-9]+\$'"
-    val statement = (connection.connection as HikariProxyConnection).createStatement()
-    statement.fetchSize = DSM_FETCH_LIMIT
-    statement.executeQuery(stm).let { rs ->
-        while (rs.next()) {
-            val bytes = rs.getBytes(1)
-            entities.add(Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt()))
-        }
-    }
-    return@transaction entities
-}
-
-fun Transaction.getBinaryAsStream(id: String): InputStream {
-    val prepareStatement = connection.prepareStatement(
-        "SELECT BINARYA FROM BINARYA " +
-                "WHERE $ID_COLUMN = ${id.toQuotes()}", false
-    )
-    val executeQuery = prepareStatement.executeQuery()
-    return if (executeQuery.next())
-        ZstdInputStream(executeQuery.getBinaryStream(1))
-    else ByteArrayInputStream(ByteArray(0)) //todo or throw error?
-
+inline fun Transaction.createMapTable(tableName: String) {
+    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, $PARENT_ID_COLUMN varchar(256) not null, KEY_JSON jsonb, VALUE_JSON jsonb);")
+    commit()
 }
 
 inline fun Transaction.execWrapper(
@@ -148,4 +71,84 @@ inline fun Transaction.execWrapper(
 ) {
     logger.trace { "SQL statement on schema '${connection.schema}': $sqlStatement" }
     exec(sqlStatement, args, transform = transform)
+}
+
+// As per https://youtrack.jetbrains.com/issue/KT-10440 there isn't a reliable way to get back a KClass for a
+// Kotlin primitive types
+val PRIMITIVE_CLASSES = mapOf<SerialKind, KClass<*>>(
+    PrimitiveKind.BOOLEAN to Boolean::class,
+    PrimitiveKind.BYTE to Byte::class,
+    PrimitiveKind.CHAR to Char::class,
+    PrimitiveKind.FLOAT to Float::class,
+    PrimitiveKind.DOUBLE to Double::class,
+    PrimitiveKind.INT to Int::class,
+    PrimitiveKind.LONG to Long::class,
+    PrimitiveKind.SHORT to Short::class,
+    PrimitiveKind.STRING to String::class,
+)
+
+fun SerialKind.isNotPrimitive() = PRIMITIVE_CLASSES[this] == null
+
+private fun EntryDescriptor.tableName() = "${first.simpleName}_to_${second.simpleName}"
+
+private val SerialDescriptor.simpleName
+    get() = when (kind) {
+        is StructureKind.LIST -> List::class.simpleName!!.lowercase(Locale.getDefault())
+        is StructureKind.MAP -> Map::class.simpleName!!.lowercase(Locale.getDefault())
+        else -> serialName.substringAfterLast(".").lowercase(Locale.getDefault())
+    }
+
+
+private val SerialDescriptor.elementsRange
+    get() = 0..elementsCount.dec()
+
+inline fun <reified T : Any> cascadeDeleteCollectionTrigger(tableName: String): String = run {
+    val collectionPaths = T::class.serializerOrNull()?.descriptor?.collectionPaths() ?: emptyList()
+    "".takeIf { collectionPaths.isEmpty() } ?: """  
+        CREATE OR REPLACE FUNCTION trigger_for_$tableName() 
+        RETURNS TRIGGER LANGUAGE PLPGSQL AS ${'$'}trigger_for_$tableName${'$'}
+            BEGIN
+                ${collectionPaths.toQuery()}
+                RETURN NEW;
+            END;
+        ${'$'}trigger_for_$tableName${'$'};
+        
+        DROP TRIGGER IF EXISTS trigger_for_$tableName on $tableName;
+        
+        CREATE TRIGGER trigger_for_$tableName
+        BEFORE UPDATE OR DELETE ON $tableName
+        FOR EACH ROW EXECUTE PROCEDURE trigger_for_$tableName();
+    """.trimIndent()
+}
+
+
+fun SerialDescriptor.collectionPaths(path: String = ""): List<PathToTable> {
+    val pathCollection = mutableListOf<PathToTable>()
+    elementsRange.forEach { index ->
+        val currentDesc = getElementDescriptor(index)
+        when (currentDesc.kind) {
+            is StructureKind.CLASS -> {
+                pathCollection.addAll(currentDesc.collectionPaths("$path->'${getElementName(index)}'"))
+            }
+            is StructureKind.LIST -> {
+                currentDesc.elementDescriptors.firstOrNull()?.takeIf { it.kind.isNotPrimitive() }?.let {
+                    pathCollection.add("$path->>'${getElementName(index)}'" to it.tableName())
+                }
+            }
+            is StructureKind.MAP -> {
+                val (keyDest, valueDest) = currentDesc.getElementDescriptor(0) to currentDesc.getElementDescriptor(1)
+                if (!keyDest.isPrimitiveKind() || !valueDest.isPrimitiveKind()) {
+                    pathCollection.add("->>'${getElementName(index)}'" to (keyDest to valueDest).tableName())
+                }
+            }
+            else -> {
+                // do nothing
+            }
+        }
+    }
+    return pathCollection
+}
+
+fun List<PathToTable>.toQuery() = fold("") { acc, (path, table) ->
+    acc + "DELETE FROM $table WHERE $ID_COLUMN IN (SELECT * FROM json_array_elements_text((OLD.json_body$path)::json)); \n"
 }

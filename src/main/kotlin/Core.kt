@@ -21,10 +21,9 @@ import com.epam.dsm.find.*
 import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import com.zaxxer.hikari.*
-import com.zaxxer.hikari.pool.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
-import kotlinx.serialization.*
+import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.jdbc.*
@@ -138,35 +137,15 @@ suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
 inline fun <reified T : Any> Transaction.findBy(
     expression: Expr<T>.() -> Unit,
 ): SearchQuery<T> = SearchQuery(buildSqlCondition(expression), db, classLoader<T>())
-) = run {
-    val tableName = createTableIfNotExists<T>(connection.schema)
-    val finalData = mutableListOf<T>()
-    val classLoader = T::class.java.classLoader
-    val sqlStatement = """
-            |SELECT JSON_BODY FROM $tableName
-            |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
-    """.trimMargin()
-    execWrapper(sqlStatement) { rs ->
-        while (rs.next()) {
-            finalData.add(
-                json.decodeFromStream(
-                    T::class.dsmSerializer(classLoader),
-                    rs.getBinaryStream(1)
-                )
-            )
-        }
-    }
-    finalData
-}
 
 suspend inline fun <reified T : Any> Transaction.findById(
     id: Any,
 ): T? = run {
     var entity: T? = null
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     execWrapper("select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") { rs ->
         if (rs.next()) {
-            entity = dsmDecode(rs.getBinaryStream(1), classLoader<T>())
+            entity = dsmDecode(rs.getBinaryStream(1))
         }
     }
     entity
@@ -222,7 +201,7 @@ inline fun <reified T : Any> Transaction.storeAsString(
             |ON CONFLICT ($ID_COLUMN) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
-    stm[1] = json.encodeToString(T::class.dsmSerializer(classLoader<T>(), id), any)
+    stm[1] = json.encodeToString(T::class.dsmSerializer(id), any)
     logger.debug { "insert: $stmt\nvalue: $any" }
     stm.executeUpdate()
 }
@@ -240,7 +219,7 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
     try {
         file.outputStream().use {
-            json.encodeToStream(T::class.dsmSerializer(classLoader<T>(), id), any, it)
+            json.encodeToStream(T::class.dsmSerializer(id), any, it)
         }
         val stmt =
             """
@@ -264,6 +243,16 @@ fun KClass<*>.tableName() = camelRegex.replace(simpleName!!) {
     "_${it.value}"
 }.lowercase(Locale.getDefault())
 
+fun SerialDescriptor.tableName(): String {
+    if (isCollectionElementType(ByteArray::class)) return "BINARYA"
+    return camelRegex.replace(serialName.substringAfterLast(".")) {
+        "_${it.value}"
+    }.lowercase(Locale.getDefault())
+}
+
+fun EntryClass<*, *>.tableName(
+) = "${first.simpleName!!.lowercase(Locale.getDefault())}_to_${second.simpleName!!.lowercase(Locale.getDefault())}"
+
 /**
  * Retrieving a table name from a given class, when the table doesn't exist, creates it.
  * By default, creates json table.
@@ -272,7 +261,7 @@ suspend inline fun <reified T : Any> createTableIfNotExists(
     schema: String,
     tableName: String = T::class.tableName(),
     crossinline createTable: Transaction.(String) -> Unit = { table ->
-        createJsonTable(table)
+        createJsonTable<T>(table)
     },
 ): String {
     val tableKey = "$schema.$tableName"
@@ -290,4 +279,4 @@ suspend inline fun <reified T : Any> createTableIfNotExists(
     return tableName
 }
 
-fun EntryClass<*, *>.tableName() = "${first.simpleName}_to_${second.simpleName}"
+
