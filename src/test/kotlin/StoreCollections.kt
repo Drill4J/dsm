@@ -16,6 +16,7 @@
 package com.epam.dsm
 
 import com.epam.dsm.common.*
+import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import org.junit.jupiter.api.*
@@ -27,7 +28,7 @@ class StoreCollections : PostgresBased("store_collections") {
 
     @Test
     fun `should store object with list`(): Unit = runBlocking {
-        val id = UUID.randomUUID().toString()
+        val id = uuid
         val countOfElements = 10
         val data = (0 until countOfElements).map {
             Data("classID$it", "className$it", "testName$it")
@@ -42,7 +43,7 @@ class StoreCollections : PostgresBased("store_collections") {
 
     @Test
     fun `should store object with empty list`() {
-        val id = UUID.randomUUID().toString()
+        val id = uuid
         val objWithList = ObjectWithList(id, emptyList())
         assertDoesNotThrow { runBlocking { storeClient.store(objWithList) } }
         assertDoesNotThrow { runBlocking { storeClient.findById<ObjectWithList>(id) } }
@@ -50,7 +51,7 @@ class StoreCollections : PostgresBased("store_collections") {
 
     @Test
     fun `should store element of collection with reserved symbols`(): Unit = runBlocking {
-        val id = UUID.randomUUID().toString()
+        val id = uuid
         val testName =
             "Can't store this test name \\b \\f \\n \\r \\t \\7 \\85h \\u88 U&'d\\0061t\\+000061' \$\$Dianne's horse\$\$ + - * / < > = ~ ! @ # % ^ & | ` ?"
         val data = Data("classID", "className", testName)
@@ -103,6 +104,24 @@ class StoreCollections : PostgresBased("store_collections") {
         assertTrue { stored.data.containsAll(objectWithList.data) }
         assertTrue { stored.anotherData.containsAll(objectWithList.anotherData) }
     }
+
+    @Test
+    fun `should cascade delete collection for same id`(): Unit = runBlocking {
+        val id = "id"
+        val data = (0 until 100).map {
+            Data("classID$it", "className$it", "testName$it")
+        }
+        val objectWithList = ObjectWithList(id, data)
+        storeClient.store(objectWithList)
+        assertTrue { storeClient.getAll<Data>().size == 100 }
+
+        val overrideObjectWithList = ObjectWithList(id, emptyList())
+        storeClient.store(overrideObjectWithList)
+        assertTrue { storeClient.getAll<Data>().isEmpty() }
+
+    }
+
+
 }
 
 @Serializable
@@ -115,7 +134,7 @@ data class ObjectWithInnerList(
 data class ObjectWithList(
     @Id val id: String,
     val data: List<Data>,
-    val anotherData: List<Data> = emptyList()
+    val anotherData: List<Data> = emptyList(),
 )
 
 @Serializable

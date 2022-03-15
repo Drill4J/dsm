@@ -17,7 +17,11 @@ package com.epam.dsm.find
 
 import com.epam.dsm.*
 import com.epam.dsm.util.*
-import kotlin.reflect.KProperty1
+import kotlinx.coroutines.*
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.statements.api.*
+import java.sql.*
+import kotlin.reflect.*
 
 const val EXTRACT_TEXT = "->>"
 const val EXTRACT_JSON = "->"
@@ -137,9 +141,24 @@ class Expr<Q : Any> {
         return this
     }
 
+    inline fun <reified T : Any> FieldPath.anyInCollection(
+        expression: Expr<T>.() -> Unit,
+    ): Expr<Q> {
+        conditions.add("(${extractText()})::jsonb ??| (SELECT ARRAY((Select $ID_COLUMN::text FROM ${T::class.tableName()} WHERE ${buildSqlCondition(expression)})))")
+        return this@Expr
+    }
+
+    inline fun <reified T : Any> FieldPath.allInCollection(
+        expression: Expr<T>.() -> Unit,
+    ): Expr<Q> {
+        conditions.add("(${extractText()})::jsonb ??& (SELECT ARRAY((Select $ID_COLUMN::text FROM ${T::class.tableName()} WHERE ${buildSqlCondition(expression)})))")
+        return this@Expr
+    }
+
 }
 
-inline fun <reified T : Any> buildSqlCondition(expression: Expr<T>.() -> Unit) =
-    Expr<T>().run { expression(this);conditions.joinToString(" ") }
+inline fun <reified T : Any> buildSqlCondition(
+    expression: Expr<T>.() -> Unit,
+) = Expr<T>().run { expression(this); conditions.joinToString(" ") }
 
 fun List<String>.toSqlIn(): String = this.joinToString(prefix = "in ('", postfix = "')", separator = "', '")

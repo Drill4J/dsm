@@ -15,8 +15,8 @@
  */
 package com.epam.dsm
 
-import com.epam.dsm.*
 import com.epam.dsm.serializer.*
+import com.epam.dsm.util.*
 import com.zaxxer.hikari.pool.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
@@ -31,15 +31,15 @@ import kotlin.reflect.*
  */
 fun <T : Any?> storeCollection(
     collection: Iterable<T>,
-    parentId: Int?,
-    parentIndex: Int?,
+    parentId: String?,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<Any>
-): Unit = transaction {
+    elementSerializer: KSerializer<Any>,
+): List<String> = transaction {
+    val ids = mutableListOf<String>()
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
     }
-    if (collection.none()) return@transaction
+    if (collection.none()) return@transaction ids
     val file = File.createTempFile("prefix-", "-postfix")
     try {
         val sizes = mutableListOf<Int>()
@@ -51,14 +51,15 @@ fun <T : Any?> storeCollection(
             }
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES (?, CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (?, ?, CAST(? as jsonb))
+            |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
             sizes.forEachIndexed { index, size ->
-                statement.setString(1, elementId(parentId, parentIndex, index))
-                statement.setCharacterStream(2, it, size)
+                statement.setString(1, uuid.also { ids.add(it) })
+                statement.setString(2, parentId)
+                statement.setCharacterStream(3, it, size)
                 statement.addBatch()
                 if (index % DSM_PUSH_LIMIT == 0) {
                     statement.executeBatch()
@@ -70,22 +71,24 @@ fun <T : Any?> storeCollection(
     } finally {
         file.delete()
     }
+    ids
 }
 
 /**
  * Loading of collection by regular expression: by prefix which is parentId plus parentIndex
  */
 inline fun <reified T : Any> loadCollection(
-    id: String,
+    ids: List<String>,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>
+    elementSerializer: KSerializer<T>,
 ): Iterable<T> = transaction {
     val entities: MutableList<T> = mutableListOf()
-    if (id.isBlank()) return@transaction entities
+    if (ids.isEmpty()) return@transaction entities
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
     }
-    val stm = "select JSON_BODY FROM $tableName WHERE ID ~ '${id}'"
+    val idString = ids.joinToString { "'$it'" }
+    val stm = "select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery().let { rs ->

@@ -27,6 +27,7 @@ import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
+import org.junit.jupiter.api.*
 import kotlin.test.*
 import kotlin.test.Test
 

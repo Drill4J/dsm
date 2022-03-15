@@ -41,7 +41,7 @@ class DsmSerializerTest {
     fun `should deserialize object`() {
         assertEquals(setPayload, json.decodeFromString(jsonPayload))
 
-        assertEquals(setPayload, dsmDecode<SetPayload>(jsonPayload, classLoader<SetPayload>()))
+        assertEquals(setPayload, dsmDecode(jsonPayload, classLoader<SetPayload>()))
     }
 
     @Test

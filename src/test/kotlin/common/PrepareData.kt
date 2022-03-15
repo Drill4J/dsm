@@ -45,12 +45,14 @@ class PrepareData {
         /**
          * Example of what structure stores:
          * PayloadWithIdList:
-        49,"{""id"": ""1"", ""list"": [""490"", ""491""]}"
-        50,"{""id"": ""2"", ""list"": [""500""]}"
+        ID   | PARENT_ID | JSONB
+        49   |   null    |"{"id": "1", "num": 42, "list": "['uuid','uuid']"}"
+        50   |   null    |"{"id": "2", "num": 32, "list": "['uuid']"}"
         SetPayload
-        490,"{""id"": ""first"", ""subObject"": {""int"": 12, ""last"": {""string"": 2}, ""string"": ""subStr""}, ""nameExample"": ""test1""}"
-        491,"{""id"": ""second"", ""subObject"": {""int"": 12, ""last"": {""string"": 2}, ""string"": ""subStr""}, ""nameExample"": ""test2""}"
-        500,"{""id"": ""third"", ""subObject"": {""int"": 12, ""last"": {""string"": 2}, ""string"": ""subStr""}, ""nameExample"": ""test1""}"
+        ID   | PARENT_ID | JSONB
+        uuid |   49      |"{"id": "first", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test1"}"
+        uuid |   49      |"{"id": "second", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test2"}"
+        uuid |   50      |"{"id": "third", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test1"}"
          */
         suspend fun StoreClient.storeLists() {
             store(payloadWithIdList)

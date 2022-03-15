@@ -89,10 +89,24 @@ class BinaryTest : PostgresBased(schema) {
     fun `store classBytes`() = runBlocking {
         val data = CodeData("ID", (1..1000).map { Random.nextBytes(200) })
         storeClient.store(data)
-        val storedData = storeClient.findById<CodeData>("ID")!!
+        val storedData = storeClient.findById<CodeData>("ID")
+        assertNotNull(storedData)
         data.classBytes.forEach { bytes ->
             assertNotNull(storedData.classBytes.find { bytes.contentToString() == it.contentToString() })
         }
+    }
+
+    @Test
+    fun `should override object with byte array`() = runBlocking {
+        val data = CodeData("ID", (1..20).map { Random.nextBytes(200) })
+        storeClient.store(data)
+        val storedData = storeClient.findById<CodeData>("ID")
+        assertNotNull(storedData)
+        assertTrue { storedData.classBytes.size == 20 }
+        storeClient.store(data.copy(classBytes = (1..10).map { Random.nextBytes(200) }))
+        val overrideStoredData = storeClient.findById<CodeData>("ID")
+        assertNotNull(overrideStoredData)
+        assertTrue { overrideStoredData.classBytes.size == 10 }
     }
 
     @Serializable
