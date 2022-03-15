@@ -23,6 +23,7 @@ import com.epam.dsm.common.PrepareData.Companion.storeLists
 import com.epam.dsm.common.PrepareData.Companion.setPayload
 import com.epam.dsm.common.PrepareData.Companion.setPayloadTest2
 import com.epam.dsm.common.PrepareData.Companion.setPayloadWithTest
+import com.epam.dsm.common.PrepareData.Companion.testNameSecond
 import kotlinx.coroutines.*
 import kotlin.test.*
 import kotlin.test.Test
@@ -98,6 +99,56 @@ class QueryTest : PostgresBased("query") {
         }
         assertEquals(listOf(setPayloadWithTest), query.get())
     }
+
+    @Test
+    fun `should find object by value in list `() = runBlocking {
+        val query = storeClient.findBy<PayloadWithIdList> {
+            (PayloadWithIdList::num eq 42) and FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
+                SetPayload::nameExample eq testNameSecond
+            } and (PayloadWithIdList::num eq 42)
+        }
+        assertEquals(listOf(payloadWithIdList), query.get())
+    }
+
+
+    @Test
+    fun `should find object by several conditions in list `() = runBlocking {
+        sequenceOf(
+            PayloadWithIdList("3", 0, "", listOf(SetPayload("Session", "One"), SetPayload("Session", "Two"))),
+            PayloadWithIdList("4", 1, "", listOf(
+                SetPayload("Session", "One"), SetPayload("Session", "Two"), SetPayload("Team", "Drill4j"),
+            )),
+            PayloadWithIdList("5", 2, "", listOf(SetPayload("Session", "One"), SetPayload("Team", "Drill4j"))),
+            PayloadWithIdList("6", 3, "", listOf(
+                SetPayload("Session", "One"),
+                SetPayload("Team", "Report Portal"),
+                SetPayload("Team", "Drill4j"))),
+            PayloadWithIdList("7", 3, "", listOf(SetPayload("Session", "Two"), SetPayload("Team", "Report Portal")))
+        ).forEach { storeClient.store(it) }
+        val query1 = storeClient.findBy<PayloadWithIdList> {
+            FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
+                (SetPayload::id eq "Session") and (SetPayload::nameExample eq "One")
+            }
+        }
+        assertEquals(4, query1.get().size)
+        val query2 = storeClient.findBy<PayloadWithIdList> {
+            FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
+                (SetPayload::id eq "Session") and (SetPayload::nameExample contains listOf("One", "Two"))
+            }
+        }
+        assertEquals(5, query2.get().size)
+
+        val query3 = storeClient.findBy<PayloadWithIdList> {
+            FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
+                (SetPayload::id eq "Session") and (SetPayload::nameExample eq "One") and
+                        (SetPayload::id eq "Team") and (SetPayload::nameExample eq "Drill4j") and
+                        (SetPayload::id eq "Team") and (SetPayload::nameExample eq "Report Portal")
+
+            }
+        }
+        assertEquals(1, query3.get().size)
+    }
+
 
 }
 
