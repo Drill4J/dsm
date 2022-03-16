@@ -66,7 +66,7 @@ fun Transaction.storeBinary(id: String, value: ByteArray) {
 
 fun storeBinaryCollection(
     bytes: Iterable<ByteArray>,
-    parentId: Int?,
+    parentId: String?,
     parentIndex: Int?
 ): Unit = transaction {
     runBlocking {

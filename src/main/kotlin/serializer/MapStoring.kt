@@ -57,7 +57,7 @@ fun Transaction.createMapTable(tableName: String) {
  */
 fun <T : Any?, R : Any?> storeMap(
     map: Map<T, R>,
-    parentId: Int?,
+    parentId: String?,
     parentIndex: Int?,
     entryClass: EntryClass<*, *>,
     serializer: EntrySerializer<Any, Any>,

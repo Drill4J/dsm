@@ -51,7 +51,7 @@ suspend inline fun <reified T : Any, reified R : Any> SearchQuery<T>.execute(
     selectSql: String = JSON_COLUMN,
     crossinline handleResult: (ResultSet, ClassLoader) -> R,
 ): List<R> = newSuspendedTransaction(db = db) {
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     val resultList = mutableListOf<R>()
     execWrapper("""
             |SELECT ${transformReturn(selectSql)} FROM $tableName

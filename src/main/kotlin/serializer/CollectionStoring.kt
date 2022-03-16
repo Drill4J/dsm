@@ -17,6 +17,7 @@ package com.epam.dsm
 
 import com.epam.dsm.*
 import com.epam.dsm.serializer.*
+import com.epam.dsm.util.*
 import com.zaxxer.hikari.pool.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
@@ -31,7 +32,7 @@ import kotlin.reflect.*
  */
 fun <T : Any?> storeCollection(
     collection: Iterable<T>,
-    parentId: Int?,
+    parentId: String?,
     parentIndex: Int?,
     elementClass: KClass<*>,
     elementSerializer: KSerializer<Any>
@@ -51,14 +52,15 @@ fun <T : Any?> storeCollection(
             }
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, JSON_BODY) VALUES (?, CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET JSON_BODY = excluded.JSON_BODY
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (?, ?, CAST(? as jsonb))
+            |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
             sizes.forEachIndexed { index, size ->
                 statement.setString(1, elementId(parentId, parentIndex, index))
-                statement.setCharacterStream(2, it, size)
+                statement.setString(2, parentId)
+                statement.setCharacterStream(3, it, size)
                 statement.addBatch()
                 if (index % DSM_PUSH_LIMIT == 0) {
                     statement.executeBatch()
@@ -85,7 +87,7 @@ inline fun <reified T : Any> loadCollection(
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
     }
-    val stm = "select JSON_BODY FROM $tableName WHERE ID ~ '${id}'"
+    val stm = "select $JSON_COLUMN FROM $tableName WHERE ID ~ '${id}'"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery().let { rs ->

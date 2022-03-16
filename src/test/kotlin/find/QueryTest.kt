@@ -79,7 +79,7 @@ class QueryTest : PostgresBased("query") {
     @Test
     fun `should find in list table when pass the ids`() = runBlocking {
         val query = storeClient.findBy<SetPayload> {
-            containsId(listOf("490", "500"))
+            containsId(listOf("49_3_0", "50_3_0"))
         }
         assertEquals(listOf(setPayloadWithTest, setPayload), query.get())
     }

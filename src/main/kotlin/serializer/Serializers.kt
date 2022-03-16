@@ -67,7 +67,7 @@ object BinarySerializer : KSerializer<ByteArray> {
 class DsmSerializer<T>(
     private val serializer: KSerializer<T>,
     val classLoader: ClassLoader,
-    val parentId: Int? = null,
+    val parentId: String? = null,
     var parentIndex: Int? = null,
 ) : KSerializer<T> by serializer {
     override fun serialize(encoder: Encoder, value: T) {
@@ -170,7 +170,7 @@ class DsmSerializer<T>(
         }
 
         inner class DsmCompositeDecoder(
-            private val compositeDecoder: CompositeDecoder
+            private val compositeDecoder: CompositeDecoder,
         ) : CompositeDecoder by compositeDecoder {
 
             @Suppress("UNCHECKED_CAST")
@@ -213,12 +213,13 @@ class DsmSerializer<T>(
                         }
                         val id = decoder.decodeSerializableValue(String.serializer())
                         if (elementDescriptor.isCollectionElementType(ByteArray::class)) {
-                            unchecked(getBinaryCollection(id).parseCollection(deserializer))
+                            unchecked(getBinaryCollection(id).parseCollection(deserializer,
+                                ByteArray::class.serializer()))
                         } else {
                             val elementClass = classLoader.getClass(elementDescriptor)
                             val kSerializer = elementClass.dsmSerializer(classLoader)
                             val list = loadCollection(id, elementClass, kSerializer)
-                            unchecked(list.parseCollection(deserializer))
+                            unchecked(list.parseCollection(deserializer, elementClass.serializer()))
                         }
                     }
                     else -> {

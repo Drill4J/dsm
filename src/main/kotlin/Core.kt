@@ -138,32 +138,12 @@ suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
 inline fun <reified T : Any> Transaction.findBy(
     expression: Expr<T>.() -> Unit,
 ): SearchQuery<T> = SearchQuery(buildSqlCondition(expression), db, classLoader<T>())
-) = run {
-    val tableName = createTableIfNotExists<T>(connection.schema)
-    val finalData = mutableListOf<T>()
-    val classLoader = T::class.java.classLoader
-    val sqlStatement = """
-            |SELECT JSON_BODY FROM $tableName
-            |WHERE ${Expr<T>().run { expression(this);conditions.joinToString(" ") }}
-    """.trimMargin()
-    execWrapper(sqlStatement) { rs ->
-        while (rs.next()) {
-            finalData.add(
-                json.decodeFromStream(
-                    T::class.dsmSerializer(classLoader),
-                    rs.getBinaryStream(1)
-                )
-            )
-        }
-    }
-    finalData
-}
 
 suspend inline fun <reified T : Any> Transaction.findById(
     id: Any,
 ): T? = run {
     var entity: T? = null
-    val tableName = T::class.createTableIfNotExists(connection.schema)
+    val tableName = createTableIfNotExists<T>(connection.schema)
     execWrapper("select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") { rs ->
         if (rs.next()) {
             entity = dsmDecode(rs.getBinaryStream(1), classLoader<T>())
