@@ -111,19 +111,20 @@ fun <T : Any?, R : Any?> storeMap(
  * Loading of map by regular expression: by prefix which is parentId plus parentIndex
  */
 inline fun <reified T : Any, reified R : Any> loadMap(
-    id: String,
+    ids: List<String>,
     clazz: EntryClass<T, R>,
     serializer: EntrySerializer<T, R>,
 ): Map<T, R> = transaction {
     val entities: MutableMap<T, R> = mutableMapOf()
-    if (id.isBlank()) return@transaction entities
+    if (ids.isEmpty()) return@transaction entities
     val tableName = clazz.tableName()
     runBlocking {
         createTableIfNotExists<Any>(connection.schema, tableName) {
             createMapTable(tableName)
         }
     }
-    val stm = "select KEY_JSON, VALUE_JSON FROM $tableName WHERE ID ~ '${id}'"
+    val idString = ids.joinToString { "'$it'" }
+    val stm = "select KEY_JSON, VALUE_JSON FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery().let { rs ->

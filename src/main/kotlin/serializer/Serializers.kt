@@ -125,8 +125,8 @@ class DsmSerializer<T>(
                             compositeEncoder.encodeSerializableElement(
                                 descriptor,
                                 index,
-                                String.serializer(),
-                                elementId(parentId, parentIndex)
+                                ListSerializer(String.serializer()),
+                                value.entries.mapIndexed { i, _ -> elementId(parentId, parentIndex, i) }
                             )
                         } else compositeEncoder.encodeSerializableElement(
                             descriptor,
@@ -150,8 +150,8 @@ class DsmSerializer<T>(
                         return compositeEncoder.encodeSerializableElement(
                             descriptor,
                             index,
-                            String.serializer(),
-                            elementId(parentId, parentIndex)
+                            ListSerializer(String.serializer()),
+                            value.mapIndexed { i, _ -> elementId(parentId, parentIndex, i) }
                         )
                     }
                     else -> {
@@ -188,13 +188,13 @@ class DsmSerializer<T>(
                         val keyDescriptor = deserializer.keySerializer.descriptor
                         val valueDescriptor = deserializer.valueSerializer.descriptor
                         if (!keyDescriptor.isPrimitiveKind() || !valueDescriptor.isPrimitiveKind()) {
-                            val id = decoder.decodeSerializableValue(String.serializer())
+                            val ids = decoder.decodeSerializableValue(ListSerializer(String.serializer()))
 
                             val clazz = classLoader.run { getClass(keyDescriptor) to getClass(valueDescriptor) }
                             val entrySerializer = deserializer.run {
                                 keySerializer to valueSerializer
                             } as EntrySerializer<Any, Any>
-                            val map = loadMap(id, clazz, entrySerializer)
+                            val map = loadMap(ids, clazz, entrySerializer)
                             unchecked(map)
                         } else compositeDecoder.decodeSerializableElement(
                             descriptor,
@@ -211,14 +211,14 @@ class DsmSerializer<T>(
                                 deserializer as KSerializer<T>
                             )
                         }
-                        val id = decoder.decodeSerializableValue(String.serializer())
+                        val ids = decoder.decodeSerializableValue(ListSerializer(String.serializer()))
                         if (elementDescriptor.isCollectionElementType(ByteArray::class)) {
-                            unchecked(getBinaryCollection(id).parseCollection(deserializer,
+                            unchecked(getBinaryCollection(ids).parseCollection(deserializer,
                                 ByteArray::class.serializer()))
                         } else {
                             val elementClass = classLoader.getClass(elementDescriptor)
                             val kSerializer = elementClass.dsmSerializer(classLoader)
-                            val list = loadCollection(id, elementClass, kSerializer)
+                            val list = loadCollection(ids, elementClass, kSerializer)
                             unchecked(list.parseCollection(deserializer, elementClass.serializer()))
                         }
                     }

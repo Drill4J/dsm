@@ -15,7 +15,6 @@
  */
 package com.epam.dsm
 
-import com.epam.dsm.*
 import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import com.zaxxer.hikari.pool.*
@@ -78,16 +77,17 @@ fun <T : Any?> storeCollection(
  * Loading of collection by regular expression: by prefix which is parentId plus parentIndex
  */
 inline fun <reified T : Any> loadCollection(
-    id: String,
+    ids: List<String>,
     elementClass: KClass<*>,
     elementSerializer: KSerializer<T>
 ): Iterable<T> = transaction {
     val entities: MutableList<T> = mutableListOf()
-    if (id.isBlank()) return@transaction entities
+    if (ids.isEmpty()) return@transaction entities
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
     }
-    val stm = "select $JSON_COLUMN FROM $tableName WHERE ID ~ '${id}'"
+    val idString = ids.joinToString { "'$it'" }
+    val stm = "select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery().let { rs ->

@@ -84,8 +84,6 @@ inline fun SerialDescriptor.isPrimitiveKind() = kind is PrimitiveKind
 @Suppress("NOTHING_TO_INLINE")
 inline fun FileOutputStream.size() = channel.size()
 
-fun elementId(index: Int, parentId: String?) = "$parentId$index"
-
 @Suppress("NOTHING_TO_INLINE")
 internal inline fun KSerializer<*>.isBitSet() = descriptor.serialName == BitSet::class.simpleName
 

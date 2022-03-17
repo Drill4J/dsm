@@ -108,16 +108,17 @@ fun Transaction.getBinary(id: String): ByteArray {
     } else byteArrayOf() //todo or throw error?
 }
 
-fun getBinaryCollection(id: String): Collection<ByteArray> = transaction {
+fun getBinaryCollection(ids: List<String>): Collection<ByteArray> = transaction {
     val entities = mutableListOf<ByteArray>()
-    if (id.isBlank()) return@transaction entities
+    if (id.isEmpty()) return@transaction entities
     val schema = connection.schema
     runBlocking {
         createTableIfNotExists<Any>(schema) {
             createBinaryTable()
         }
     }
-    val stm = "SELECT BINARYA FROM BINARYA WHERE ID ~ '^$id[0-9]+\$'"
+    val idString = ids.joinToString { "'$it'" }
+    val stm = "SELECT BINARYA FROM BINARYA WHERE ID in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).createStatement()
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery(stm).let { rs ->

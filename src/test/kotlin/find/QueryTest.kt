@@ -73,7 +73,7 @@ class QueryTest : PostgresBased("query") {
     @Test
     fun `should find list of list stings when execute with the list of objects`() = runBlocking {
         val findBy: SearchQuery<PayloadWithIdList> = storeClient.findBy { PayloadWithIdList::id eq "1" }
-        assertEquals(listOf("490", "491"), findBy.getListIds(PayloadWithIdList::list.name))
+        assertEquals(listOf("49_3_0", "49_3_1"), findBy.getListIds(PayloadWithIdList::list.name))
     }
 
     @Test
@@ -122,9 +122,11 @@ class QueryTest : PostgresBased("query") {
             PayloadWithIdList("6", 3, "", listOf(
                 SetPayload("Session", "One"),
                 SetPayload("Team", "Report Portal"),
+                SetPayload("Team", "Zapad"),
                 SetPayload("Team", "Drill4j"))),
             PayloadWithIdList("7", 3, "", listOf(SetPayload("Session", "Two"), SetPayload("Team", "Report Portal")))
         ).forEach { storeClient.store(it) }
+
         val query1 = storeClient.findBy<PayloadWithIdList> {
             FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
                 (SetPayload::id eq "Session") and (SetPayload::nameExample eq "One")
@@ -138,14 +140,18 @@ class QueryTest : PostgresBased("query") {
         }
         assertEquals(5, query2.get().size)
 
-        val query3 = storeClient.findBy<PayloadWithIdList> {
-            FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
-                (SetPayload::id eq "Session") and (SetPayload::nameExample eq "One") and
-                        (SetPayload::id eq "Team") and (SetPayload::nameExample eq "Drill4j") and
-                        (SetPayload::id eq "Team") and (SetPayload::nameExample eq "Report Portal")
 
+        val query3 = storeClient.findBy<PayloadWithIdList> {
+            val initial = FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
+                (SetPayload::id eq "Session") and (SetPayload::nameExample eq "One")
+            }
+            sequenceOf("Report Portal", "Drill4j").fold(initial) { acc2, value ->
+                acc2 and (FieldPath(PayloadWithIdList::list).anyInCollection<SetPayload> {
+                    (SetPayload::id eq "Team") and (SetPayload::nameExample eq value)
+                })
             }
         }
+
         assertEquals(1, query3.get().size)
     }
 
