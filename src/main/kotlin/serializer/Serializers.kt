@@ -151,7 +151,7 @@ class DsmSerializer<T>(
                             descriptor,
                             index,
                             ListSerializer(String.serializer()),
-                            value.mapIndexed { i, _ -> elementId(parentId, parentIndex, i) }
+                            value.mapIndexed { i, v -> "${v.hashCode()}_${elementId(parentId, parentIndex, i)}" }
                         )
                     }
                     else -> {

@@ -40,6 +40,7 @@ class CustomQueryTest : PostgresBased("custom_query") {
     )
 
     @Test
+    //REMOVE Parent id
     fun `should create custom sql when few results`() = runBlocking {
         storeClient.storeLists()
         val result = storeClient.executeInTransaction {

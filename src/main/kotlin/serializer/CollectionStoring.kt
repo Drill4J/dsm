@@ -31,10 +31,8 @@ import kotlin.reflect.*
  */
 fun <T : Any?> storeCollection(
     collection: Iterable<T>,
-    parentId: String?,
-    parentIndex: Int?,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<Any>
+    elementSerializer: KSerializer<Any>,
 ): Unit = transaction {
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
@@ -42,24 +40,23 @@ fun <T : Any?> storeCollection(
     if (collection.none()) return@transaction
     val file = File.createTempFile("prefix-", "-postfix")
     try {
-        val sizes = mutableListOf<Int>()
+        val sizes = mutableListOf<Pair<Int, Int>>()
         file.outputStream().use { outputStream ->
             collection.filterNotNull().forEach { value ->
                 val sizeBefore = outputStream.size()
                 json.encodeToStream(elementSerializer, value, outputStream)
-                sizes.add((outputStream.size() - sizeBefore).toInt())
+                sizes.add(value.hashCode() to ((outputStream.size() - sizeBefore).toInt()))
             }
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (?, ?, CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $JSON_COLUMN) VALUES (?, CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
-            sizes.forEachIndexed { index, size ->
-                statement.setString(1, elementId(parentId, parentIndex, index))
-                statement.setString(2, parentId)
-                statement.setCharacterStream(3, it, size)
+            sizes.forEachIndexed { index, (hash, size) ->
+                statement.setString(1, uuid)
+                statement.setCharacterStream(2, it, size)
                 statement.addBatch()
                 if (index % DSM_PUSH_LIMIT == 0) {
                     statement.executeBatch()
@@ -79,7 +76,7 @@ fun <T : Any?> storeCollection(
 inline fun <reified T : Any> loadCollection(
     ids: List<String>,
     elementClass: KClass<*>,
-    elementSerializer: KSerializer<T>
+    elementSerializer: KSerializer<T>,
 ): Iterable<T> = transaction {
     val entities: MutableList<T> = mutableListOf()
     if (ids.isEmpty()) return@transaction entities

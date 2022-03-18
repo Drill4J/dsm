@@ -21,10 +21,9 @@ import com.epam.dsm.find.*
 import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import com.zaxxer.hikari.*
-import com.zaxxer.hikari.pool.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
-import kotlinx.serialization.*
+import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.jdbc.*
@@ -244,6 +243,11 @@ fun KClass<*>.tableName() = camelRegex.replace(simpleName!!) {
     "_${it.value}"
 }.lowercase(Locale.getDefault())
 
+fun SerialDescriptor.tableName() = camelRegex.replace(serialName.substring(serialName.lastIndexOf(".") + 1)) {
+    "_${it.value}"
+}.lowercase(Locale.getDefault())
+
+
 /**
  * Retrieving a table name from a given class, when the table doesn't exist, creates it.
  * By default, creates json table.
@@ -252,7 +256,7 @@ suspend inline fun <reified T : Any> createTableIfNotExists(
     schema: String,
     tableName: String = T::class.tableName(),
     crossinline createTable: Transaction.(String) -> Unit = { table ->
-        createJsonTable(table)
+        createJsonTable<T>(table)
     },
 ): String {
     val tableKey = "$schema.$tableName"

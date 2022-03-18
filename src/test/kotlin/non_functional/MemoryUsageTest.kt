@@ -61,7 +61,7 @@ class MemoryUsageTest : PostgresBased(schema) {
         println("Loading session")
         val finishSession = storeClient.findById<FinishSession>(s)
         assertTrue((finishSession?.execClassData?.size ?: 0) > 0)
-        assertTrue((finishSession?.execClassData?.sumBy { it.probes.size() } ?: 0) > 0)
+        assertTrue((finishSession?.execClassData?.sumOf { it.probes.size() } ?: 0) > 0)
     }
 
     private suspend fun startStopSession(

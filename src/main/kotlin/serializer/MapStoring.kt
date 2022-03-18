@@ -33,25 +33,6 @@ typealias EntrySize = Pair<Int, Int>
 typealias EntryClass<T, R> = Pair<KClass<T>, KClass<R>>
 typealias EntrySerializer<T, R> = Pair<KSerializer<T>, KSerializer<R>>
 
-// As per https://youtrack.jetbrains.com/issue/KT-10440 there isn't a reliable way to get back a KClass for a
-// Kotlin primitive types
-val PRIMITIVE_CLASSES = mapOf<SerialKind, KClass<*>>(
-    PrimitiveKind.BOOLEAN to Boolean::class,
-    PrimitiveKind.BYTE to Byte::class,
-    PrimitiveKind.CHAR to Char::class,
-    PrimitiveKind.FLOAT to Float::class,
-    PrimitiveKind.DOUBLE to Double::class,
-    PrimitiveKind.INT to Int::class,
-    PrimitiveKind.LONG to Long::class,
-    PrimitiveKind.SHORT to Short::class,
-    PrimitiveKind.STRING to String::class,
-)
-
-fun Transaction.createMapTable(tableName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, PARENT_ID varchar(256) not null, KEY_JSON jsonb, VALUE_JSON jsonb);")
-    commit()
-}
-
 /**
  * File is needed to don't keep a huge map in memory
  */
@@ -85,7 +66,7 @@ fun <T : Any?, R : Any?> storeMap(
             sizes
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, PARENT_ID, KEY_JSON, VALUE_JSON) VALUES (?,'$parentId', CAST(? as jsonb), CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, KEY_JSON, VALUE_JSON) VALUES (?, CAST(? as jsonb), CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET PARENT_ID = excluded.PARENT_ID, KEY_JSON = excluded.KEY_JSON, VALUE_JSON = excluded.VALUE_JSON
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)

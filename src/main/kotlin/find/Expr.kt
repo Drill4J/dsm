@@ -136,11 +136,6 @@ class Expr<Q : Any> {
         return this
     }
 
-    infix fun Expr<Q>.containsParentId(list: List<String>): Expr<Q> {
-        conditions.add("$PARENT_ID_COLUMN ${list.toSqlIn()}")
-        return this
-    }
-
     inline fun <reified T : Any> FieldPath.anyInCollection(
         expression: Expr<T>.() -> Unit,
     ): Expr<Q> {
