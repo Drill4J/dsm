@@ -8,38 +8,38 @@ import kotlin.test.*
 class PathBuilderTest {
 
     @Serializable
-    data class ObjectWithListPrimitive(
+    private data class ObjectWithListPrimitive(
         val string: String,
         val list: List<String>,
     )
 
     @Serializable
-    data class ObjectWithObjectWithList(
+    private data class ObjectWithObjectWithList(
         val name: String,
         val objectWithObjectList: ObjectWithObjectList,
     )
 
     @Serializable
-    data class ObjectWithObjectWithTwoList(
+    private data class ObjectWithObjectWithTwoList(
         val name: String,
         val objectWithObjectList: ObjectWithListTwoList,
     )
 
     @Serializable
-    data class ObjectWithObjectWithTwoListWithList(
+    private data class ObjectWithObjectWithTwoListWithList(
         val name: String,
         val objectWithObjectList: ObjectWithListTwoList,
         val list: List<SimpleObject>,
     )
 
     @Serializable
-    data class ObjectWithObjectList(
+    private data class ObjectWithObjectList(
         val sum: Int,
         val list: List<SimpleObject>,
     )
 
     @Serializable
-    data class ObjectWithListTwoList(
+    private data class ObjectWithListTwoList(
         val name: String,
         val first: List<SimpleObject>,
         val second: Set<SimpleObject>,
@@ -47,7 +47,7 @@ class PathBuilderTest {
 
 
     @Serializable
-    data class SimpleObject(
+    private data class SimpleObject(
         val name: String,
     )
 

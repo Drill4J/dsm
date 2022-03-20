@@ -27,6 +27,7 @@ import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
+import org.junit.jupiter.api.*
 import kotlin.test.*
 import kotlin.test.Test
 
@@ -40,6 +41,7 @@ class CustomQueryTest : PostgresBased("custom_query") {
     )
 
     @Test
+//    @Disabled
     //REMOVE Parent id
     fun `should create custom sql when few results`() = runBlocking {
         storeClient.storeLists()
@@ -53,8 +55,7 @@ class CustomQueryTest : PostgresBased("custom_query") {
                        child.$JSON_COLUMN
                 from $tableName as child,
                      $parentTableName as parent
-                where child.$PARENT_ID_COLUMN $containsIds
-                  and parent.$ID_COLUMN $containsIds;
+                where parent.$ID_COLUMN $containsIds;
             """.trimIndent()
             val result = mutableListOf<ResultDto>()
             logger.debug { "sql:\n$sql" }

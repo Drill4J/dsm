@@ -20,13 +20,9 @@ import com.epam.dsm.common.*
 import com.epam.dsm.common.PrepareData.Companion.complexObject
 import com.epam.dsm.common.PrepareData.Companion.payloadWithIdList
 import com.epam.dsm.common.PrepareData.Companion.storeLists
-import com.epam.dsm.common.PrepareData.Companion.setPayload
-import com.epam.dsm.common.PrepareData.Companion.setPayloadTest2
-import com.epam.dsm.common.PrepareData.Companion.setPayloadWithTest
 import com.epam.dsm.common.PrepareData.Companion.testNameSecond
 import kotlinx.coroutines.*
 import kotlin.test.*
-import kotlin.test.Test
 
 class QueryTest : PostgresBased("query") {
     @BeforeTest
@@ -73,31 +69,7 @@ class QueryTest : PostgresBased("query") {
     @Test
     fun `should find list of list stings when execute with the list of objects`() = runBlocking {
         val findBy: SearchQuery<PayloadWithIdList> = storeClient.findBy { PayloadWithIdList::id eq "1" }
-        assertEquals(listOf("49_3_0", "49_3_1"), findBy.getListIds(PayloadWithIdList::list.name))
-    }
-
-    @Test
-    fun `should find in list table when pass the ids`() = runBlocking {
-        val query = storeClient.findBy<SetPayload> {
-            containsId(listOf("49_3_0", "50_3_0"))
-        }
-        assertEquals(listOf(setPayloadWithTest, setPayload), query.get())
-    }
-
-    @Test
-    fun `should find in list table when pass the parent ids`() = runBlocking {
-        val query = storeClient.findBy<SetPayload> {
-            containsParentId(listOf("49"))
-        }
-        assertEquals(listOf(setPayloadWithTest, setPayloadTest2), query.get())
-    }
-
-    @Test
-    fun `should find in list table when pass the ids and additional queries`() = runBlocking {
-        val query = storeClient.findBy<SetPayload> {
-            containsParentId(listOf("49")) and (SetPayload::id eq "first")
-        }
-        assertEquals(listOf(setPayloadWithTest), query.get())
+        assertEquals(2, findBy.getListIds(PayloadWithIdList::list.name).size)
     }
 
     @Test

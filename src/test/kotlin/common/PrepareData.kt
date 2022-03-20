@@ -45,12 +45,12 @@ class PrepareData {
         /**
          * Example of what structure stores:
          * PayloadWithIdList:
-        49,"{"id": "1", "num": 42, "list": "49_3_"}"
-        50,"{"id": "2", "num": 32, "list": "50_3_"}"
+        uuid,"{"id": "1", "num": 42, "list": "uuid"}"
+        uuid,"{"id": "2", "num": 32, "list": "uuid"}"
         SetPayload
-        49_3_0, "{"id": "first", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test1"}"
-        49_3_1, "{"id": "second", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test2"}"
-        50_3_0, "{"id": "third", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test1"}"
+        uuid, "{"id": "first", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test1"}"
+        uuid, "{"id": "second", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test2"}"
+        uuid, "{"id": "third", "subObject": {"int": 12, "last": {"string": 2}, "string": "subStr"}, "nameExample": "test1"}"
          */
         suspend fun StoreClient.storeLists() {
             store(payloadWithIdList)

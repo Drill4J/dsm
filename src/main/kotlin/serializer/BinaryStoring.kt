@@ -23,9 +23,8 @@ fun Transaction.storeBinary(id: String, value: ByteArray) {
 
 fun storeBinaryCollection(
     bytes: Iterable<ByteArray>,
-    parentId: String?,
-    parentIndex: Int?
-): Unit = transaction {
+): List<String> = transaction {
+    val ids = mutableListOf<String>()
     runBlocking {
         createTableIfNotExists<Any>(connection.schema) { createBinaryTable() }
     }
@@ -36,7 +35,7 @@ fun storeBinaryCollection(
     """.trimMargin()
     )
     bytes.forEachIndexed { index, value ->
-        statement.setString(1, elementId(parentId, parentIndex, index))
+        statement.setString(1, uuid.also { ids.add(it) })
         statement.setBytes(2, Zstd.compress(value))
         statement.addBatch()
         statement.clearParameters()
@@ -46,6 +45,7 @@ fun storeBinaryCollection(
         }
     }
     statement.executeBatch()
+    ids
 }
 
 fun Transaction.getBinary(id: String): ByteArray {

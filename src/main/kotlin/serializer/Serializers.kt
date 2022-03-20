@@ -35,7 +35,7 @@ val DSM_FETCH_LIMIT = System.getenv("DSM_FETCH_LIMIT")?.toIntOrNull() ?: 10_000
 object BinarySerializer : KSerializer<ByteArray> {
 
     override fun serialize(encoder: Encoder, value: ByteArray) {
-        val id = UUID.randomUUID().toString()
+        val id = uuid
         transaction {
             val schema = connection.schema
             runBlocking {
@@ -67,8 +67,6 @@ object BinarySerializer : KSerializer<ByteArray> {
 class DsmSerializer<T>(
     private val serializer: KSerializer<T>,
     val classLoader: ClassLoader,
-    val parentId: String? = null,
-    var parentIndex: Int? = null,
 ) : KSerializer<T> by serializer {
     override fun serialize(encoder: Encoder, value: T) {
         if (serializer.isBitSet()) {
@@ -105,7 +103,6 @@ class DsmSerializer<T>(
                 serializer: SerializationStrategy<T>,
                 value: T,
             ) {
-                parentIndex = index
                 when (value) {
                     is ByteArray, is Enum<*> -> {
                         //TODO EPMDJ-9885 Get rid of the ByteArraySerializer
@@ -121,12 +118,12 @@ class DsmSerializer<T>(
                             val entrySerializer = mapLikeSerializer.run {
                                 keySerializer to valueSerializer
                             } as EntrySerializer<Any, Any>
-                            storeMap(value, parentId, parentIndex, clazz, entrySerializer)
+                            val ids = storeMap(value, clazz, entrySerializer)
                             compositeEncoder.encodeSerializableElement(
                                 descriptor,
                                 index,
                                 ListSerializer(String.serializer()),
-                                value.entries.mapIndexed { i, _ -> elementId(parentId, parentIndex, i) }
+                                ids
                             )
                         } else compositeEncoder.encodeSerializableElement(
                             descriptor,
@@ -140,22 +137,22 @@ class DsmSerializer<T>(
                         if (elementDescriptor.isPrimitiveKind()) {
                             return compositeEncoder.encodeSerializableElement(descriptor, index, serializer, value)
                         }
-                        if (elementDescriptor.isCollectionElementType(ByteArray::class)) {
-                            storeBinaryCollection(unchecked(value.filterNotNull()), parentId, parentIndex)
+                        val ids = if (elementDescriptor.isCollectionElementType(ByteArray::class)) {
+                            storeBinaryCollection(unchecked(value.filterNotNull()))
                         } else {
                             val clazz = classLoader.getClass(elementDescriptor)
-                            val elementSerializer = clazz.dsmSerializer(classLoader, parentId)
-                            storeCollection(value, parentId, parentIndex, clazz, elementSerializer)
+                            val elementSerializer = clazz.dsmSerializer(classLoader)
+                            storeCollection(value, clazz, elementSerializer)
                         }
                         return compositeEncoder.encodeSerializableElement(
                             descriptor,
                             index,
                             ListSerializer(String.serializer()),
-                            value.mapIndexed { i, v -> "${v.hashCode()}_${elementId(parentId, parentIndex, i)}" }
+                            ids
                         )
                     }
                     else -> {
-                        val strategy = DsmSerializer(serializer as KSerializer<T>, classLoader, parentId, index)
+                        val strategy = DsmSerializer(serializer as KSerializer<T>, classLoader)
                         compositeEncoder.encodeSerializableElement(descriptor, index, strategy, value)
                     }
                 }
@@ -249,16 +246,18 @@ private fun Iterable<Any>.parseCollection(
     else -> TODO("not implemented yet")
 }
 
-inline fun <reified T : Any> dsmDecode(inputStream: InputStream, classLoader: ClassLoader): T = json.decodeFromStream(
+inline fun <reified T : Any> dsmDecode(
+    inputStream: InputStream,
+    classLoader: ClassLoader = T::class.java.classLoader!!,
+): T = json.decodeFromStream(
     T::class.dsmSerializer(classLoader),
     inputStream
 )
 
-inline fun <reified T : Any> dsmDecode(inputJson: String, classLoader: ClassLoader): T =
-    json.decodeFromString(
-        T::class.dsmSerializer(classLoader),
-        inputJson
-    )
+inline fun <reified T : Any> dsmDecode(
+    inputJson: String,
+    classLoader: ClassLoader,
+): T = json.decodeFromString(T::class.dsmSerializer(classLoader), inputJson)
 
 inline fun <reified T : Any> classLoader(): ClassLoader = T::class.java.classLoader!!
 

@@ -38,12 +38,11 @@ typealias EntrySerializer<T, R> = Pair<KSerializer<T>, KSerializer<R>>
  */
 fun <T : Any?, R : Any?> storeMap(
     map: Map<T, R>,
-    parentId: String?,
-    parentIndex: Int?,
     entryClass: EntryClass<*, *>,
     serializer: EntrySerializer<Any, Any>,
-): Unit = transaction {
-    if (map.none()) return@transaction
+): List<String> = transaction {
+    val ids = mutableListOf<String>()
+    if (map.none()) return@transaction ids
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, entryClass.tableName()) {
             createMapTable(it)
@@ -67,12 +66,12 @@ fun <T : Any?, R : Any?> storeMap(
         }
         val stmt = """
             |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, KEY_JSON, VALUE_JSON) VALUES (?, CAST(? as jsonb), CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET PARENT_ID = excluded.PARENT_ID, KEY_JSON = excluded.KEY_JSON, VALUE_JSON = excluded.VALUE_JSON
+            |ON CONFLICT (id) DO UPDATE SET KEY_JSON = excluded.KEY_JSON, VALUE_JSON = excluded.VALUE_JSON
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
             sizes.forEachIndexed { index, (keySize, valueSize) ->
-                statement.setString(1, elementId(parentId, parentIndex, index))
+                statement.setString(1, uuid.also { ids.add(it) })
                 statement.setCharacterStream(2, it, keySize)
                 statement.setCharacterStream(3, it, valueSize)
                 statement.addBatch()
@@ -86,6 +85,7 @@ fun <T : Any?, R : Any?> storeMap(
     } finally {
         file.delete()
     }
+    ids
 }
 
 /**

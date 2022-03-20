@@ -182,15 +182,15 @@ class ExpressionTest : PostgresBased("expression") {
         assertEquals(1, result.size)
     }
 
-    @Test
-    fun `should find nothing when list table does not create yet`() = runBlocking {
-        val findBy = storeClient.findBy<SetPayload> {
-            containsParentId(listOf("23"))
-        }
-        assertEquals(0, findBy.get().size)
-        assertEquals(0, findBy.getAndMap(SetPayload::nameExample).size)
-        assertEquals(0, findBy.getAndMap<SetPayload, String>(SetPayload::nameExample.name).size)
-    }
+//    @Test
+//    fun `should find nothing when list table does not create yet`() = runBlocking {
+//        val findBy = storeClient.findBy<SetPayload> {
+//            containsParentId(listOf("23"))
+//        }
+//        assertEquals(0, findBy.get().size)
+//        assertEquals(0, findBy.getAndMap(SetPayload::nameExample).size)
+//        assertEquals(0, findBy.getAndMap<SetPayload, String>(SetPayload::nameExample.name).size)
+//    }
 
     @Test
     fun `should find when search in list of subjects `() = runBlocking {

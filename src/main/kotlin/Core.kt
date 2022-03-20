@@ -36,7 +36,6 @@ import kotlin.time.*
 
 const val JSON_COLUMN = "JSON_BODY"
 const val ID_COLUMN = "ID"
-const val PARENT_ID_COLUMN = "PARENT_ID"
 
 /**
  * Can be init by:
@@ -145,7 +144,7 @@ suspend inline fun <reified T : Any> Transaction.findById(
     val tableName = createTableIfNotExists<T>(connection.schema)
     execWrapper("select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") { rs ->
         if (rs.next()) {
-            entity = dsmDecode(rs.getBinaryStream(1), classLoader<T>())
+            entity = dsmDecode(rs.getBinaryStream(1))
         }
     }
     entity
@@ -201,7 +200,7 @@ inline fun <reified T : Any> Transaction.storeAsString(
             |ON CONFLICT ($ID_COLUMN) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
-    stm[1] = json.encodeToString(T::class.dsmSerializer(classLoader<T>(), id), any)
+    stm[1] = json.encodeToString(T::class.dsmSerializer(), any)
     logger.debug { "insert: $stmt\nvalue: $any" }
     stm.executeUpdate()
 }
@@ -219,7 +218,7 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
     try {
         file.outputStream().use {
-            json.encodeToStream(T::class.dsmSerializer(classLoader<T>(), id), any, it)
+            json.encodeToStream(T::class.dsmSerializer(), any, it)
         }
         val stmt =
             """

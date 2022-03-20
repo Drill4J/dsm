@@ -33,19 +33,20 @@ fun <T : Any?> storeCollection(
     collection: Iterable<T>,
     elementClass: KClass<*>,
     elementSerializer: KSerializer<Any>,
-): Unit = transaction {
+): List<String> = transaction {
+    val ids = mutableListOf<String>()
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
     }
-    if (collection.none()) return@transaction
+    if (collection.none()) return@transaction ids
     val file = File.createTempFile("prefix-", "-postfix")
     try {
-        val sizes = mutableListOf<Pair<Int, Int>>()
+        val sizes = mutableListOf<Int>()
         file.outputStream().use { outputStream ->
             collection.filterNotNull().forEach { value ->
                 val sizeBefore = outputStream.size()
                 json.encodeToStream(elementSerializer, value, outputStream)
-                sizes.add(value.hashCode() to ((outputStream.size() - sizeBefore).toInt()))
+                sizes.add((outputStream.size() - sizeBefore).toInt())
             }
         }
         val stmt = """
@@ -54,8 +55,8 @@ fun <T : Any?> storeCollection(
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
-            sizes.forEachIndexed { index, (hash, size) ->
-                statement.setString(1, uuid)
+            sizes.forEachIndexed { index, size ->
+                statement.setString(1, uuid.also { ids.add(it) })
                 statement.setCharacterStream(2, it, size)
                 statement.addBatch()
                 if (index % DSM_PUSH_LIMIT == 0) {
@@ -68,6 +69,7 @@ fun <T : Any?> storeCollection(
     } finally {
         file.delete()
     }
+    ids
 }
 
 /**

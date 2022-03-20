@@ -58,25 +58,18 @@ fun Any.encodeId(): String = when (this) {
 }
 
 inline fun <reified T : Any> KClass<T>.dsmSerializer(
-    classLoader: ClassLoader,
-    parentId: String? = null,
+    classLoader: ClassLoader = T::class.java.classLoader!!,
 ): KSerializer<T> {
     val curSerializer = this.serializer()
     val serializer = if (curSerializer is AbstractPolymorphicSerializer<*>) {
         json.serializersModule.serializer()
     } else curSerializer
-    return DsmSerializer(serializer, classLoader, parentId)
+    return DsmSerializer(serializer, classLoader)
 }
 
 @Suppress("NOTHING_TO_INLINE", "UNCHECKED_CAST")
 inline fun <T> unchecked(any: Any) = any as T
 
-@Suppress("NOTHING_TO_INLINE")
-inline fun elementId(
-    parentId: String?,
-    parentIndex: Int?,
-    index: Int = -1
-) = "${parentId}_${parentIndex}_${index.takeIf { it >= 0 } ?: ""}"
 
 @Suppress("NOTHING_TO_INLINE")
 inline fun SerialDescriptor.isPrimitiveKind() = kind is PrimitiveKind

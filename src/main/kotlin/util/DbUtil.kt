@@ -38,9 +38,9 @@ inline fun <reified T : Any> Transaction.createJsonTable(tableName: String) {
             $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key, 
             $JSON_COLUMN jsonb
         );
+        ${createCollectionTrigger<T>(tableName)}
    """
     )
-    createCollectionTrigger<T>(tableName)
     commit()
 }
 
@@ -55,7 +55,7 @@ fun Transaction.createBinaryTable() {
 }
 
 inline fun Transaction.createMapTable(tableName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, PARENT_ID varchar(256) not null, KEY_JSON jsonb, VALUE_JSON jsonb);")
+    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, KEY_JSON jsonb, VALUE_JSON jsonb);")
     commit()
 }
 
@@ -84,35 +84,23 @@ val PRIMITIVE_CLASSES = mapOf<SerialKind, KClass<*>>(
 
 fun SerialKind.isNotPrimitive() = PRIMITIVE_CLASSES[this] == null
 
-inline fun <reified T : Any> createCollectionTrigger(tableName: String) {
-    val desc = T::class.serializer().descriptor.collectionPaths()
-
-    """ 
-        CREATE TRIGGER check_update_delete_$tableName
-        BEFORE UPDATE OR DELETE ON plugin.test_overview
-        FOR EACH ROW
-        EXECUTE PROCEDURE trigger_for_$tableName();
+inline fun <reified T : Any> createCollectionTrigger(tableName: String): String = run {
+    val collectionPaths = T::class.serializerOrNull()?.descriptor?.collectionPaths() ?: emptyList()
+    "".takeIf {
+        collectionPaths.isEmpty()
+    } ?: """  
+        CREATE OR REPLACE FUNCTION trigger_for_$tableName() 
+        RETURNS TRIGGER LANGUAGE PLPGSQL AS ${'$'}trigger_for_$tableName${'$'}
+            BEGIN
+                ${collectionPaths.toQuery()}
+                RETURN NEW;
+            END;
+        ${'$'}trigger_for_$tableName${'$'};
         
-        CREATE OR REPLACE FUNCTION trigger_for_$tableName()
-         RETURNS TRIGGER LANGUAGE PLPGSQL AS $$ 
-          	BEGIN 
-          	 	DELETE FROM plugin.LABEL WHERE ID IN ((OLD.json_body -> 'data'->>'lables')::text[]);
-          	RETURN NEW;
-          	END;
-        $$
-        
+        CREATE OR REPLACE TRIGGER trigger_for_$tableName
+        BEFORE UPDATE OR DELETE ON $tableName
+        FOR EACH ROW EXECUTE PROCEDURE trigger_for_$tableName();
     """.trimIndent()
-
-//    val collections = kClass.declaredMemberProperties.filter {
-//        (it.returnType.classifier as? KClass<*>)?.isSubclassOf(Collection::class) ?: false
-//    }.mapNotNull {
-//        (it.returnType.arguments.firstOrNull()?.type?.classifier as? KClass<*>)?.let { genericClass ->
-//            if (genericClass !in PRIMITIVE_CLASSES.values) {
-//                it.name to genericClass.tableName()
-//            }
-//        }
-//    }
-
 }
 
 typealias PathToTable = Pair<String, String>
@@ -142,8 +130,8 @@ fun pathBuilder(parentDesc: SerialDescriptor, path: String = ""): List<PathToTab
         if (currentDesc.kind is StructureKind.CLASS) {
             pathCollection.addAll(
                 pathBuilder(
-                    currentDesc.getElementDescriptor(index),
-                    "$path->'${currentDesc.getElementName(index)}'"
+                    currentDesc,
+                    "$path->'${parentDesc.getElementName(index)}'"
                 )
             )
         }
@@ -154,4 +142,8 @@ fun pathBuilder(parentDesc: SerialDescriptor, path: String = ""): List<PathToTab
         }
     }
     return pathCollection
+}
+
+fun List<PathToTable>.toQuery() = fold("") { acc, (path, table) ->
+    acc + "DELETE FROM $table WHERE $ID_COLUMN IN (SELECT * FROM json_array_elements_text((OLD.json_body$path)::json)); \n"
 }
