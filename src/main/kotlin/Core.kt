@@ -36,6 +36,7 @@ import kotlin.time.*
 
 const val JSON_COLUMN = "JSON_BODY"
 const val ID_COLUMN = "ID"
+const val PARENT_ID_COLUMN = "PARENT_ID"
 
 /**
  * Can be init by:
@@ -200,7 +201,7 @@ inline fun <reified T : Any> Transaction.storeAsString(
             |ON CONFLICT ($ID_COLUMN) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
-    stm[1] = json.encodeToString(T::class.dsmSerializer(), any)
+    stm[1] = json.encodeToString(T::class.dsmSerializer(id), any)
     logger.debug { "insert: $stmt\nvalue: $any" }
     stm.executeUpdate()
 }
@@ -218,7 +219,7 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
     try {
         file.outputStream().use {
-            json.encodeToStream(T::class.dsmSerializer(), any, it)
+            json.encodeToStream(T::class.dsmSerializer(id), any, it)
         }
         val stmt =
             """
@@ -242,10 +243,15 @@ fun KClass<*>.tableName() = camelRegex.replace(simpleName!!) {
     "_${it.value}"
 }.lowercase(Locale.getDefault())
 
-fun SerialDescriptor.tableName() = camelRegex.replace(serialName.substring(serialName.lastIndexOf(".") + 1)) {
-    "_${it.value}"
-}.lowercase(Locale.getDefault())
+fun SerialDescriptor.tableName(): String {
+    if (isCollectionElementType(ByteArray::class)) return "BINARYA"
+    return camelRegex.replace(serialName.substringAfterLast(".")) {
+        "_${it.value}"
+    }.lowercase(Locale.getDefault())
+}
 
+fun EntryClass<*, *>.tableName(
+) = "${first.simpleName!!.lowercase(Locale.getDefault())}_to_${second.simpleName!!.lowercase(Locale.getDefault())}"
 
 /**
  * Retrieving a table name from a given class, when the table doesn't exist, creates it.
@@ -273,4 +279,4 @@ suspend inline fun <reified T : Any> createTableIfNotExists(
     return tableName
 }
 
-fun EntryClass<*, *>.tableName() = "${first.simpleName}_to_${second.simpleName}"
+

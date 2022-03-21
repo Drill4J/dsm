@@ -67,6 +67,7 @@ object BinarySerializer : KSerializer<ByteArray> {
 class DsmSerializer<T>(
     private val serializer: KSerializer<T>,
     val classLoader: ClassLoader,
+    val parentId: String? = null,
 ) : KSerializer<T> by serializer {
     override fun serialize(encoder: Encoder, value: T) {
         if (serializer.isBitSet()) {
@@ -118,7 +119,7 @@ class DsmSerializer<T>(
                             val entrySerializer = mapLikeSerializer.run {
                                 keySerializer to valueSerializer
                             } as EntrySerializer<Any, Any>
-                            val ids = storeMap(value, clazz, entrySerializer)
+                            val ids = storeMap(value, parentId, clazz, entrySerializer)
                             compositeEncoder.encodeSerializableElement(
                                 descriptor,
                                 index,
@@ -141,8 +142,8 @@ class DsmSerializer<T>(
                             storeBinaryCollection(unchecked(value.filterNotNull()))
                         } else {
                             val clazz = classLoader.getClass(elementDescriptor)
-                            val elementSerializer = clazz.dsmSerializer(classLoader)
-                            storeCollection(value, clazz, elementSerializer)
+                            val elementSerializer = clazz.dsmSerializer(parentId, classLoader)
+                            storeCollection(value, parentId, clazz, elementSerializer)
                         }
                         return compositeEncoder.encodeSerializableElement(
                             descriptor,
@@ -152,7 +153,7 @@ class DsmSerializer<T>(
                         )
                     }
                     else -> {
-                        val strategy = DsmSerializer(serializer as KSerializer<T>, classLoader)
+                        val strategy = DsmSerializer(serializer as KSerializer<T>, classLoader, parentId)
                         compositeEncoder.encodeSerializableElement(descriptor, index, strategy, value)
                     }
                 }
@@ -214,13 +215,13 @@ class DsmSerializer<T>(
                                 ByteArray::class.serializer()))
                         } else {
                             val elementClass = classLoader.getClass(elementDescriptor)
-                            val kSerializer = elementClass.dsmSerializer(classLoader)
+                            val kSerializer = elementClass.dsmSerializer(parentId, classLoader)
                             val list = loadCollection(ids, elementClass, kSerializer)
                             unchecked(list.parseCollection(deserializer, elementClass.serializer()))
                         }
                     }
                     else -> {
-                        val strategy = DsmSerializer(deserializer as KSerializer<T>, classLoader)
+                        val strategy = DsmSerializer(deserializer as KSerializer<T>, classLoader, parentId)
                         compositeDecoder.decodeSerializableElement(descriptor, index, strategy)
                     }
                 }
@@ -250,14 +251,14 @@ inline fun <reified T : Any> dsmDecode(
     inputStream: InputStream,
     classLoader: ClassLoader = T::class.java.classLoader!!,
 ): T = json.decodeFromStream(
-    T::class.dsmSerializer(classLoader),
+    T::class.dsmSerializer(classLoader = classLoader),
     inputStream
 )
 
 inline fun <reified T : Any> dsmDecode(
     inputJson: String,
     classLoader: ClassLoader,
-): T = json.decodeFromString(T::class.dsmSerializer(classLoader), inputJson)
+): T = json.decodeFromString(T::class.dsmSerializer(classLoader = classLoader), inputJson)
 
 inline fun <reified T : Any> classLoader(): ClassLoader = T::class.java.classLoader!!
 

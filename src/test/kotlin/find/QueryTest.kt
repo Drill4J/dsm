@@ -62,9 +62,26 @@ class QueryTest : PostgresBased("query") {
     @Test
     fun `should find ids when pass conditions`() = runBlocking {
         val query: SearchQuery<PayloadWithIdList> = storeClient.findBy { PayloadWithIdList::id eq "1" }
-
         assertEquals(listOf("49"), query.getIds())
     }
+
+
+    @Test
+    fun `should find in list table when pass the parent ids`() = runBlocking {
+        val query = storeClient.findBy<SetPayload> {
+            containsParentId(listOf("49"))
+        }
+        assertEquals(listOf(PrepareData.setPayloadWithTest, PrepareData.setPayloadTest2), query.get())
+    }
+
+    @Test
+    fun `should find in list table when pass the ids and additional queries`() = runBlocking {
+        val query = storeClient.findBy<SetPayload> {
+            containsParentId(listOf("49")) and (SetPayload::id eq "first")
+        }
+        assertEquals(listOf(PrepareData.setPayloadWithTest), query.get())
+    }
+
 
     @Test
     fun `should find list of list stings when execute with the list of objects`() = runBlocking {
@@ -123,7 +140,6 @@ class QueryTest : PostgresBased("query") {
                 })
             }
         }
-
         assertEquals(1, query3.get().size)
     }
 

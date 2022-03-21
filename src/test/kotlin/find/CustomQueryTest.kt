@@ -41,8 +41,6 @@ class CustomQueryTest : PostgresBased("custom_query") {
     )
 
     @Test
-//    @Disabled
-    //REMOVE Parent id
     fun `should create custom sql when few results`() = runBlocking {
         storeClient.storeLists()
         val result = storeClient.executeInTransaction {
@@ -55,7 +53,8 @@ class CustomQueryTest : PostgresBased("custom_query") {
                        child.$JSON_COLUMN
                 from $tableName as child,
                      $parentTableName as parent
-                where parent.$ID_COLUMN $containsIds;
+                where child.$PARENT_ID_COLUMN $containsIds
+                  and parent.$ID_COLUMN $containsIds;
             """.trimIndent()
             val result = mutableListOf<ResultDto>()
             logger.debug { "sql:\n$sql" }

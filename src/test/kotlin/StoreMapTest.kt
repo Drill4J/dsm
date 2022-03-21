@@ -16,6 +16,7 @@
 package com.epam.dsm
 
 import com.epam.dsm.common.*
+import com.epam.dsm.util.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import java.util.*
@@ -95,10 +96,10 @@ class StoreMapTest : PostgresBased("map") {
             Data("classid$i", "className$i", "testName$i")
         }.chunked(2).associate {
             val objectsWithList = it.chunked(2).map { data ->
-                ObjectWithList("${UUID.randomUUID()}", data)
+                ObjectWithList(uuid, data)
             }
-            val objectWithInnerList = ObjectWithInnerList("${UUID.randomUUID()}", objectsWithList)
-            "${UUID.randomUUID()}" to objectWithInnerList
+            val objectWithInnerList = ObjectWithInnerList(uuid, objectsWithList)
+            uuid to objectWithInnerList
         }
         val mapWithInnerList = MapWithInnerList(id, data)
         storeClient.store(mapWithInnerList)
@@ -110,28 +111,40 @@ class StoreMapTest : PostgresBased("map") {
             assertTrue { actual.data.containsAll(value.data) }
         }
     }
+
+    @Test
+    fun `should override object with empty map`(): Unit = runBlocking {
+        val id = "some-id"
+        val map = ObjectWithMap(id, emptyMap())
+        storeClient.store(map)
+        val stored = storeClient.findById<ObjectWithMap>(id)
+        assertNotNull(stored)
+        storeClient.store(map)
+        val storedAgain = storeClient.findById<ObjectWithMap>(id)
+        assertNotNull(storedAgain)
+    }
 }
 
 @Serializable
 data class ObjectWithMap(
     @Id val id: String,
-    val data: Map<String, Data>
+    val data: Map<String, Data>,
 )
 
 @Serializable
 data class ClassWithListValue(
     @Id val id: String,
-    val map: Map<String, List<Data>>
+    val map: Map<String, List<Data>>,
 )
 
 @Serializable
 data class ClassWithSetValue(
     @Id val id: String,
-    val map: Map<String, Set<Data>>
+    val map: Map<String, Set<Data>>,
 )
 
 @Serializable
 data class MapWithInnerList(
     @Id val id: String,
-    val map: Map<String, ObjectWithInnerList>
+    val map: Map<String, ObjectWithInnerList>,
 )

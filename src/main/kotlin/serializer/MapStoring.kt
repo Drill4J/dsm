@@ -38,16 +38,17 @@ typealias EntrySerializer<T, R> = Pair<KSerializer<T>, KSerializer<R>>
  */
 fun <T : Any?, R : Any?> storeMap(
     map: Map<T, R>,
+    parentId: String?,
     entryClass: EntryClass<*, *>,
     serializer: EntrySerializer<Any, Any>,
 ): List<String> = transaction {
     val ids = mutableListOf<String>()
-    if (map.none()) return@transaction ids
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, entryClass.tableName()) {
             createMapTable(it)
         }
     }
+    if (map.none()) return@transaction ids
     val file = File.createTempFile("prefix-", "-postfix") // TODO EPMDJ-9370 Remove file creating
     val sizes = mutableListOf<EntrySize>()
     try {
@@ -65,15 +66,16 @@ fun <T : Any?, R : Any?> storeMap(
             sizes
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, KEY_JSON, VALUE_JSON) VALUES (?, CAST(? as jsonb), CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, KEY_JSON, VALUE_JSON) VALUES (?, ?, CAST(? as jsonb), CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET KEY_JSON = excluded.KEY_JSON, VALUE_JSON = excluded.VALUE_JSON
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
             sizes.forEachIndexed { index, (keySize, valueSize) ->
                 statement.setString(1, uuid.also { ids.add(it) })
-                statement.setCharacterStream(2, it, keySize)
-                statement.setCharacterStream(3, it, valueSize)
+                statement.setString(2, parentId)
+                statement.setCharacterStream(3, it, keySize)
+                statement.setCharacterStream(4, it, valueSize)
                 statement.addBatch()
                 if (index % DSM_PUSH_LIMIT == 0) {
                     statement.executeBatch()
@@ -97,13 +99,13 @@ inline fun <reified T : Any, reified R : Any> loadMap(
     serializer: EntrySerializer<T, R>,
 ): Map<T, R> = transaction {
     val entities: MutableMap<T, R> = mutableMapOf()
-    if (ids.isEmpty()) return@transaction entities
     val tableName = clazz.tableName()
     runBlocking {
         createTableIfNotExists<Any>(connection.schema, tableName) {
             createMapTable(tableName)
         }
     }
+    if (ids.isEmpty()) return@transaction entities
     val idString = ids.joinToString { "'$it'" }
     val stm = "select KEY_JSON, VALUE_JSON FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)

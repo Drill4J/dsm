@@ -23,22 +23,27 @@ import kotlinx.serialization.descriptors.*
 import mu.*
 import org.jetbrains.exposed.sql.*
 import java.sql.*
+import java.util.*
 import kotlin.reflect.*
+
+typealias PathToTable = Pair<String, String>
+typealias EntryDescriptor = Pair<SerialDescriptor, SerialDescriptor>
 
 internal val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 
 val logger = KotlinLogging.logger {}
 
 internal val uuid
-    get() = "${java.util.UUID.randomUUID()}"
+    get() = "${UUID.randomUUID()}"
 
 inline fun <reified T : Any> Transaction.createJsonTable(tableName: String) {
     execWrapper("""
         CREATE TABLE IF NOT EXISTS $tableName (
-            $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key, 
+            $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key,
+            $PARENT_ID_COLUMN varchar(256), 
             $JSON_COLUMN jsonb
         );
-        ${createCollectionTrigger<T>(tableName)}
+        ${cascadeDeleteCollectionTrigger<T>(tableName)}
    """
     )
     commit()
@@ -55,7 +60,7 @@ fun Transaction.createBinaryTable() {
 }
 
 inline fun Transaction.createMapTable(tableName: String) {
-    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, KEY_JSON jsonb, VALUE_JSON jsonb);")
+    execWrapper("CREATE TABLE IF NOT EXISTS $tableName (ID varchar(256) not null constraint ${tableName}_pk primary key, $PARENT_ID_COLUMN varchar(256) not null, KEY_JSON jsonb, VALUE_JSON jsonb);")
     commit()
 }
 
@@ -84,11 +89,22 @@ val PRIMITIVE_CLASSES = mapOf<SerialKind, KClass<*>>(
 
 fun SerialKind.isNotPrimitive() = PRIMITIVE_CLASSES[this] == null
 
-inline fun <reified T : Any> createCollectionTrigger(tableName: String): String = run {
+private fun EntryDescriptor.tableName() = "${first.simpleName}_to_${second.simpleName}"
+
+private val SerialDescriptor.simpleName
+    get() = when (kind) {
+        is StructureKind.LIST -> List::class.simpleName!!.lowercase(Locale.getDefault())
+        is StructureKind.MAP -> Map::class.simpleName!!.lowercase(Locale.getDefault())
+        else -> serialName.substringAfterLast(".").lowercase(Locale.getDefault())
+    }
+
+
+private val SerialDescriptor.elementsRange
+    get() = 0..elementsCount.dec()
+
+inline fun <reified T : Any> cascadeDeleteCollectionTrigger(tableName: String): String = run {
     val collectionPaths = T::class.serializerOrNull()?.descriptor?.collectionPaths() ?: emptyList()
-    "".takeIf {
-        collectionPaths.isEmpty()
-    } ?: """  
+    "".takeIf { collectionPaths.isEmpty() } ?: """  
         CREATE OR REPLACE FUNCTION trigger_for_$tableName() 
         RETURNS TRIGGER LANGUAGE PLPGSQL AS ${'$'}trigger_for_$tableName${'$'}
             BEGIN
@@ -97,47 +113,36 @@ inline fun <reified T : Any> createCollectionTrigger(tableName: String): String 
             END;
         ${'$'}trigger_for_$tableName${'$'};
         
-        CREATE OR REPLACE TRIGGER trigger_for_$tableName
+        DROP TRIGGER IF EXISTS trigger_for_$tableName on $tableName;
+        
+        CREATE TRIGGER trigger_for_$tableName
         BEFORE UPDATE OR DELETE ON $tableName
         FOR EACH ROW EXECUTE PROCEDURE trigger_for_$tableName();
     """.trimIndent()
 }
 
-typealias PathToTable = Pair<String, String>
 
-private val SerialDescriptor.elementsRange
-    get() = 0..elementsCount.dec()
-
-fun SerialDescriptor.collectionPaths() = elementsRange.map { index ->
+fun SerialDescriptor.collectionPaths(path: String = ""): List<PathToTable> {
     val pathCollection = mutableListOf<PathToTable>()
-    val elementDescriptor = getElementDescriptor(index)
-    if (elementDescriptor.kind is StructureKind.CLASS) {
-        pathCollection.addAll(pathBuilder(elementDescriptor, "->'${getElementName(index)}'"))
-    }
-
-    if (elementDescriptor.kind is StructureKind.LIST) {
-        elementDescriptor.elementDescriptors.firstOrNull()?.takeIf { it.kind.isNotPrimitive() }?.let {
-            pathCollection.add("->>'${getElementName(index)}'" to it.tableName())
-        }
-    }
-    pathCollection
-}.flatten()
-
-fun pathBuilder(parentDesc: SerialDescriptor, path: String = ""): List<PathToTable> {
-    val pathCollection = mutableListOf<PathToTable>()
-    parentDesc.elementsRange.forEach { index ->
-        val currentDesc = parentDesc.getElementDescriptor(index)
-        if (currentDesc.kind is StructureKind.CLASS) {
-            pathCollection.addAll(
-                pathBuilder(
-                    currentDesc,
-                    "$path->'${parentDesc.getElementName(index)}'"
-                )
-            )
-        }
-        if (currentDesc.kind is StructureKind.LIST) {
-            currentDesc.elementDescriptors.firstOrNull()?.takeIf { PRIMITIVE_CLASSES[it.kind] == null }?.let {
-                pathCollection.add("$path->>'${parentDesc.getElementName(index)}'" to it.tableName())
+    elementsRange.forEach { index ->
+        val currentDesc = getElementDescriptor(index)
+        when (currentDesc.kind) {
+            is StructureKind.CLASS -> {
+                pathCollection.addAll(currentDesc.collectionPaths("$path->'${getElementName(index)}'"))
+            }
+            is StructureKind.LIST -> {
+                currentDesc.elementDescriptors.firstOrNull()?.takeIf { it.kind.isNotPrimitive() }?.let {
+                    pathCollection.add("$path->>'${getElementName(index)}'" to it.tableName())
+                }
+            }
+            is StructureKind.MAP -> {
+                val (keyDest, valueDest) = currentDesc.getElementDescriptor(0) to currentDesc.getElementDescriptor(1)
+                if (!keyDest.isPrimitiveKind() || !valueDest.isPrimitiveKind()) {
+                    pathCollection.add("->>'${getElementName(index)}'" to (keyDest to valueDest).tableName())
+                }
+            }
+            else -> {
+                // do nothing
             }
         }
     }

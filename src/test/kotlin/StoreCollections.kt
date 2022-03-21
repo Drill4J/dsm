@@ -106,7 +106,7 @@ class StoreCollections : PostgresBased("store_collections") {
     }
 
     @Test
-    fun `should cascade delete collection for same parent id`(): Unit = runBlocking {
+    fun `should cascade delete collection for same id`(): Unit = runBlocking {
         val id = "id"
         val data = (0 until 100).map {
             Data("classID$it", "className$it", "testName$it")
@@ -114,6 +114,11 @@ class StoreCollections : PostgresBased("store_collections") {
         val objectWithList = ObjectWithList(id, data)
         storeClient.store(objectWithList)
         assertTrue { storeClient.getAll<Data>().size == 100 }
+
+        val overrideObjectWithList = ObjectWithList(id, emptyList())
+        storeClient.store(overrideObjectWithList)
+        assertTrue { storeClient.getAll<Data>().isEmpty() }
+
     }
 
 

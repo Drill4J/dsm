@@ -58,13 +58,14 @@ fun Any.encodeId(): String = when (this) {
 }
 
 inline fun <reified T : Any> KClass<T>.dsmSerializer(
+    parentId: String? = null,
     classLoader: ClassLoader = T::class.java.classLoader!!,
 ): KSerializer<T> {
     val curSerializer = this.serializer()
     val serializer = if (curSerializer is AbstractPolymorphicSerializer<*>) {
         json.serializersModule.serializer()
     } else curSerializer
-    return DsmSerializer(serializer, classLoader)
+    return DsmSerializer(serializer, classLoader, parentId)
 }
 
 @Suppress("NOTHING_TO_INLINE", "UNCHECKED_CAST")

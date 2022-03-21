@@ -31,6 +31,7 @@ import kotlin.reflect.*
  */
 fun <T : Any?> storeCollection(
     collection: Iterable<T>,
+    parentId: String?,
     elementClass: KClass<*>,
     elementSerializer: KSerializer<Any>,
 ): List<String> = transaction {
@@ -50,14 +51,15 @@ fun <T : Any?> storeCollection(
             }
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $JSON_COLUMN) VALUES (?, CAST(? as jsonb))
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (?, ?, CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
             sizes.forEachIndexed { index, size ->
                 statement.setString(1, uuid.also { ids.add(it) })
-                statement.setCharacterStream(2, it, size)
+                statement.setString(2, parentId)
+                statement.setCharacterStream(3, it, size)
                 statement.addBatch()
                 if (index % DSM_PUSH_LIMIT == 0) {
                     statement.executeBatch()
