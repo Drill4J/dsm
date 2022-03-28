@@ -106,6 +106,37 @@ class StoreCollections : PostgresBased("store_collections") {
     }
 
     @Test
+    fun `should delete by id`(): Unit = runBlocking {
+        val id = "id"
+        storeClient.store(ObjectWithList(id, listOf(Data("classID", "className", "testName"))))
+        storeClient.deleteById<ObjectWithList>(id)
+        assertEquals(emptyList(), storeClient.getAll<ObjectWithList>())
+        assertEquals(emptyList(), storeClient.getAll<Data>())
+    }
+
+    @Test
+    fun `should delete by query`(): Unit = runBlocking {
+        val id = "id"
+        storeClient.store(ObjectWithList(id, listOf(Data("classID", "className", "testName"))))
+        storeClient.deleteBy<ObjectWithList>{
+            ObjectWithList::id eq id
+        }
+        assertEquals(emptyList(), storeClient.getAll<ObjectWithList>())
+        assertEquals(emptyList(), storeClient.getAll<Data>())
+    }
+
+    @Test
+    fun `should update with the same id`(): Unit = runBlocking {
+        val id = "id"
+        val element = Data("classID", "className", "testName")
+        storeClient.store(ObjectWithList(id, listOf(element)))
+        val updateData = listOf(element.copy(classId = "another"))
+        storeClient.store(ObjectWithList(id, updateData))
+        assertEquals(ObjectWithList(id, updateData), storeClient.getAll<ObjectWithList>().first())
+        assertEquals(1, storeClient.getAll<Data>().size)
+    }
+
+    @Test
     fun `should cascade delete collection for same id`(): Unit = runBlocking {
         val id = "id"
         val data = (0 until 100).map {

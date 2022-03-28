@@ -43,7 +43,8 @@ inline fun <reified T : Any> Transaction.createJsonTable(tableName: String) {
             $PARENT_ID_COLUMN varchar(256), 
             $JSON_COLUMN jsonb
         );
-        ${cascadeDeleteCollectionTrigger<T>(tableName)}
+        ${cascadeDeleteCollectionTrigger<T>(tableName, "update", "NEW")}
+        ${cascadeDeleteCollectionTrigger<T>(tableName, "delete", "OLD")}
    """
     )
     commit()
@@ -102,22 +103,35 @@ private val SerialDescriptor.simpleName
 private val SerialDescriptor.elementsRange
     get() = 0..elementsCount.dec()
 
-inline fun <reified T : Any> cascadeDeleteCollectionTrigger(tableName: String): String = run {
+inline fun <reified T : Any> cascadeDeleteCollectionTrigger(
+    tableName: String,
+    operation: String,
+    returnValue: String,
+): String = run {
     val collectionPaths = T::class.serializerOrNull()?.descriptor?.collectionPaths() ?: emptyList()
-    "".takeIf { collectionPaths.isEmpty() } ?: """  
-        CREATE OR REPLACE FUNCTION trigger_for_$tableName() 
-        RETURNS TRIGGER LANGUAGE PLPGSQL AS ${'$'}trigger_for_$tableName${'$'}
+    tableName.createTrigger(collectionPaths, operation, returnValue)
+}
+
+fun String.createTrigger(
+    collectionPaths: List<PathToTable>,
+    operation: String,
+    returnValue: String,
+): String {
+    val triggerName = """trigger_${operation}_for_$this"""
+    return "".takeIf { collectionPaths.isEmpty() } ?: """
+        CREATE OR REPLACE FUNCTION $triggerName() 
+        RETURNS TRIGGER LANGUAGE PLPGSQL AS ${'$'}$triggerName${'$'}
             BEGIN
                 ${collectionPaths.toQuery()}
-                RETURN NEW;
+                RETURN $returnValue;
             END;
-        ${'$'}trigger_for_$tableName${'$'};
+        ${'$'}$triggerName${'$'};
         
-        DROP TRIGGER IF EXISTS trigger_for_$tableName on $tableName;
+        DROP TRIGGER IF EXISTS $triggerName on $this;
         
-        CREATE TRIGGER trigger_for_$tableName
-        BEFORE UPDATE OR DELETE ON $tableName
-        FOR EACH ROW EXECUTE PROCEDURE trigger_for_$tableName();
+        CREATE TRIGGER $triggerName
+        BEFORE $operation ON $this
+        FOR EACH ROW EXECUTE PROCEDURE $triggerName();
     """.trimIndent()
 }
 
