@@ -36,6 +36,7 @@ typealias EntrySerializer<T, R> = Pair<KSerializer<T>, KSerializer<R>>
 /**
  * File is needed to don't keep a huge map in memory
  */
+//todo EPMDJ-10155 need to investigate other ways to store map, then add support for separate Column
 fun <T : Any?, R : Any?> storeMap(
     map: Map<T, R>,
     parentId: String?,

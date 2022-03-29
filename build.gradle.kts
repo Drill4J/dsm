@@ -38,6 +38,7 @@ val flywayVersion: String by extra
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
     implementation(kotlin("reflect"))
+    api(project(":annotations"))
     api("com.zaxxer:HikariCP:$hikariVersion")
     api("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")

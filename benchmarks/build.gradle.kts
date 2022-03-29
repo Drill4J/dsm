@@ -30,6 +30,7 @@ noArg {
 
 dependencies {
     implementation(project(":"))
+    api(project(":annotations"))
     testImplementation(project(":test-framework"))
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")

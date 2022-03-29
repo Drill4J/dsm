@@ -24,3 +24,4 @@ pluginManagement {
 
 include(":benchmarks")
 include(":test-framework")
+include("annotations")
