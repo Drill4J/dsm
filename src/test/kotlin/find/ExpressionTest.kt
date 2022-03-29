@@ -189,7 +189,6 @@ class ExpressionTest : PostgresBased("expression") {
         }
         assertEquals(0, findBy.get().size)
         assertEquals(0, findBy.getAndMap(SetPayload::nameExample).size)
-        assertEquals(0, findBy.getAndMap<SetPayload, String>(SetPayload::nameExample.name).size)
     }
 
     @Test

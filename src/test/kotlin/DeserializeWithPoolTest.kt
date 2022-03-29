@@ -15,6 +15,7 @@
  */
 package com.epam.dsm
 
+import com.epam.dsm.common.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlin.test.*

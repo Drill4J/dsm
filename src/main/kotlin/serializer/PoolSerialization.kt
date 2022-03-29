@@ -16,6 +16,7 @@
 package com.epam.dsm.serializer
 
 import com.epam.dsm.*
+import com.epam.dsm.util.*
 import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
