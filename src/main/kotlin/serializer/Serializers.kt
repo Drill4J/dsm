@@ -241,8 +241,6 @@ class DsmSerializer<T>(
         return classLoader.loadClass(elementDescriptor.serialName).kotlin as KClass<Any>
     }
 
-    //todo rmeove
-    private fun curClassLoader() = Thread.currentThread().contextClassLoader
 }
 
 private fun Iterable<Any>.parseCollection(

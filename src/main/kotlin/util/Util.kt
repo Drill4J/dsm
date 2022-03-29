@@ -29,12 +29,11 @@ import kotlin.reflect.full.*
 
 val json = Json {
     allowStructuredMapKeys = true
-//    coerceInputValues = true// todo is it need?
     encodeDefaults = true
 }
 
 inline fun <reified T : Any> T.id(): String {
-    val idNames = idNames(T::class.serializer().descriptor)
+    val idNames = T::class.serializer().descriptor.idNames()
     val propertiesWithId = T::class.memberProperties.filter { idNames.contains(it.name) }
     val uniqueId = propertiesWithId.map {
         it.getter.invoke(this)?.hashCode()
@@ -47,9 +46,27 @@ inline fun <reified T : Any> T.id(): String {
     return uniqueId
 }
 
-fun idNames(desc: SerialDescriptor) = (0 until desc.elementsCount).filter { index ->
-    desc.getElementAnnotations(index).any { it is Id }
-}.map { idIndex -> desc.getElementName(idIndex) }
+fun SerialDescriptor.idNames(): List<String> = (0 until elementsCount).filter { index ->
+    getElementAnnotations(index).any { it is Id }
+}.map { idIndex -> getElementName(idIndex) }
+
+inline fun <reified A : Annotation> SerialDescriptor.findAnnotation(): String? = (0 until elementsCount).firstOrNull { index ->
+    getElementAnnotations(index).any { it is A }
+}?.let { idIndex -> getElementName(idIndex) }
+
+fun SerialDescriptor.findColumnAnnotation(
+    path: List<String> = emptyList(),
+    result: MutableMap<Column, List<String>> = mutableMapOf()
+): Map<Column, List<String>> = (0 until elementsCount).forEach { index ->
+    val innerDescriptor = getElementDescriptor(index)
+    val element = getElementName(index)
+    getElementAnnotations(index).find { it is Column }?.let {
+        result[it as Column] = path + element
+    }
+    if (innerDescriptor.isClassSerialKind()) {
+        innerDescriptor.findColumnAnnotation(path + element, result)
+    } else return@forEach
+}.run { result }
 
 fun Any.encodeId(): String = when (this) {
     is String -> this
@@ -74,6 +91,11 @@ inline fun <T> unchecked(any: Any) = any as T
 
 @Suppress("NOTHING_TO_INLINE")
 inline fun SerialDescriptor.isPrimitiveKind() = kind is PrimitiveKind
+
+@Suppress("NOTHING_TO_INLINE")
+inline fun SerialDescriptor.isClassSerialKind() = kind in listOf(
+    StructureKind.CLASS, StructureKind.OBJECT, PolymorphicKind.OPEN, SerialKind.CONTEXTUAL
+)
 
 @Suppress("NOTHING_TO_INLINE")
 inline fun FileOutputStream.size() = channel.size()

@@ -73,11 +73,11 @@ fun Transaction.getBinary(id: String): ByteArray {
         "SELECT BINARYA FROM BINARYA WHERE $ID_COLUMN = ${id.toQuotes()}",
         false
     )
-    val executeQuery = prepareStatement.executeQuery()
-    return if (executeQuery.next()) {
-        val bytes = executeQuery.getBytes(1)
+    val resultSet = prepareStatement.executeQuery()
+    return if (resultSet.next()) {
+        val bytes = resultSet.getBytes(1)
         Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt())
-    } else byteArrayOf() //todo or throw error?
+    } else throw RuntimeException("Not found with id $id")
 }
 
 fun getBinaryCollection(ids: List<String>): Collection<ByteArray> = transaction {
@@ -107,9 +107,9 @@ fun Transaction.getBinaryAsStream(id: String): InputStream {
         "SELECT BINARYA FROM BINARYA " +
                 "WHERE $ID_COLUMN = ${id.toQuotes()}", false
     )
-    val executeQuery = prepareStatement.executeQuery()
-    return if (executeQuery.next())
-        ZstdInputStream(executeQuery.getBinaryStream(1))
-    else ByteArrayInputStream(ByteArray(0)) //todo or throw error?
+    val resultSet = prepareStatement.executeQuery()
+    return if (resultSet.next())
+        ZstdInputStream(resultSet.getBinaryStream(1))
+    else throw RuntimeException("Not found with id $id")
 
 }

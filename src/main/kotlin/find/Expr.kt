@@ -17,29 +17,51 @@ package com.epam.dsm.find
 
 import com.epam.dsm.*
 import com.epam.dsm.util.*
-import kotlinx.coroutines.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.statements.api.*
-import java.sql.*
 import kotlin.reflect.*
+import kotlin.reflect.full.*
 
 const val EXTRACT_TEXT = "->>"
 const val EXTRACT_JSON = "->"
 
-class FieldPath {
-    private val path: List<String>
+/**
+ * FieldPath is using to search for a path starting with JSON_BODY
+ */
+class FieldPath : Path {
+    constructor(vararg properties: KProperty1<*, *>) : super(properties.map { it.name })
 
-    constructor(vararg properties: KProperty1<*, *>) {
-        path = properties.map { it.name }
-    }
+    constructor(vararg fields: String) : super(fields.toList())
 
-    constructor(vararg fields: String) {
-        path = fields.toList()
-    }
+    constructor(fields: List<String>) : super(fields)
 
-    constructor(fields: List<String>) {
-        path = fields
+    /**
+     * Build sql path starting with JSON_BODY.
+     * @param lastOperation - operator -> or ->> before last path element
+     * Return example: json_body -> 'path' -> 'to' ->> 'field'
+     */
+    override fun buildSqlPath(lastOperation: String): String {
+        return path.toSqlPath(JSON_COLUMN, lastOperation)
     }
+}
+
+/**
+ * ColumnPath is using to search for a path starting the separate column name
+ */
+class ColumnPath(
+    vararg properties: KProperty1<*, *>
+) : Path(properties.map { it.findAnnotation<Column>()?.name ?: it.name }) {
+
+    /**
+     * Build sql path starting with name of separate column. First path element should be annotated with [Column]
+     * @param lastOperation - operator -> or ->> before last path element
+     * Return example: column -> 'path' -> 'to' ->> 'field'
+     */
+    override fun buildSqlPath(lastOperation: String): String {
+        return path.drop(1).toSqlPath(path.first(), lastOperation)
+    }
+}
+
+abstract class Path(fields: List<String>) {
+    val path: List<String> = fields
 
     fun extractText(): String {
         return buildSqlPath(EXTRACT_TEXT)
@@ -49,16 +71,7 @@ class FieldPath {
         return buildSqlPath(EXTRACT_JSON)
     }
 
-    private fun buildSqlPath(lastOperation: String): String {
-        val sqlPath = if (path.size > 1) {
-            path.dropLast(1).joinToString(prefix = "$JSON_COLUMN $EXTRACT_JSON '",
-                separator = "' $EXTRACT_JSON '",
-                postfix = "'")
-        } else {
-            JSON_COLUMN
-        }
-        return "$sqlPath $lastOperation ${path.last().toQuotes()}"
-    }
+    abstract fun buildSqlPath(lastOperation: String): String
 }
 
 /**
@@ -84,49 +97,55 @@ class Expr<Q : Any> {
 
     infix fun <R : Comparable<*>> KProperty1<Q, R>.eq(r: R): Expr<Q> {
         val encodeId = r.encodeId()
-        conditions.add("""
-            ${if (encodeId.startsWith("{")) "$JSON_COLUMN->" else "$JSON_COLUMN->>"}
-            ${this@eq.name.toQuotes()}${equal(encodeId)}
-            """.trimIndent())
+        conditions.add(
+            """
+            ${columnOrJsonBody(if (encodeId.startsWith("{")) "$JSON_COLUMN->" else "$JSON_COLUMN->>")}
+            ${equal(encodeId)}
+            """.trimIndent()
+        )
         return this@Expr
     }
 
-    infix fun FieldPath.eq(value: String): Expr<Q> {
+    infix fun Path.eq(value: String): Expr<Q> {
         conditions.add("${extractText()} ${equal(value)}")
         return this@Expr
     }
 
     private fun equal(value: String) = "= ${value.toQuotes()}"
 
-    fun FieldPath.eqNull(): Expr<Q> {
+    fun Path.eqNull(): Expr<Q> {
         conditions.add("${extractText()}${this@Expr.eqNull()}")
         return this@Expr
     }
 
     fun <R : Comparable<*>> KProperty1<Q, R>.eqNull(): Expr<Q> {
-        conditions.add("$JSON_COLUMN->>${this@eqNull.name.toQuotes()}${this@Expr.eqNull()}")
+        conditions.add("${columnOrJsonBody()}${this@Expr.eqNull()}")
         return this@Expr
     }
 
     private fun eqNull() = " is null"
 
     infix fun <R : Comparable<*>> KProperty1<Q, R>.startsWith(prefix: String): Expr<Q> {
-        conditions.add("$JSON_COLUMN->> ${this@startsWith.name.toQuotes()} like '$prefix%'")
+        conditions.add("${columnOrJsonBody()} like '$prefix%'")
         return this@Expr
     }
 
     infix fun <R : Comparable<*>> KProperty1<Q, R>.contains(values: List<String>): Expr<Q> {
-        conditions.add("$JSON_COLUMN->> ${this@contains.name.toQuotes()}${values.toSqlIn()}")
+        conditions.add("${columnOrJsonBody()}${values.toSqlIn()}")
         return this@Expr
     }
 
-    infix fun FieldPath.containsWithNull(values: List<String>): Expr<Q> {
+    private fun <R : Comparable<*>> KProperty1<Q, R>.columnOrJsonBody(
+        startPath: String = "$JSON_COLUMN->>"
+    ) = findAnnotation<Column>()?.name ?: "$startPath${this.name.toQuotes()}"
+
+    infix fun Path.containsWithNull(values: List<String>): Expr<Q> {
         val pathField = extractText()
         conditions.add("($pathField ${values.toSqlIn()} OR $pathField${this@Expr.eqNull()})")
         return this@Expr
     }
 
-    infix fun FieldPath.contains(values: List<String>): Expr<Q> {
+    infix fun Path.contains(values: List<String>): Expr<Q> {
         conditions.add("${extractText()} ${values.toSqlIn()}")
         return this@Expr
     }
@@ -144,14 +163,26 @@ class Expr<Q : Any> {
     inline fun <reified T : Any> FieldPath.anyInCollection(
         expression: Expr<T>.() -> Unit,
     ): Expr<Q> {
-        conditions.add("(${extractText()})::jsonb ??| (SELECT ARRAY((Select $ID_COLUMN::text FROM ${T::class.tableName()} WHERE ${buildSqlCondition(expression)})))")
+        conditions.add(
+            "(${extractText()})::jsonb ??| (SELECT ARRAY((Select $ID_COLUMN::text FROM ${T::class.tableName()} WHERE ${
+                buildSqlCondition(
+                    expression
+                )
+            })))"
+        )
         return this@Expr
     }
 
     inline fun <reified T : Any> FieldPath.allInCollection(
         expression: Expr<T>.() -> Unit,
     ): Expr<Q> {
-        conditions.add("(${extractText()})::jsonb ??& (SELECT ARRAY((Select $ID_COLUMN::text FROM ${T::class.tableName()} WHERE ${buildSqlCondition(expression)})))")
+        conditions.add(
+            "(${extractText()})::jsonb ??& (SELECT ARRAY((Select $ID_COLUMN::text FROM ${T::class.tableName()} WHERE ${
+                buildSqlCondition(
+                    expression
+                )
+            })))"
+        )
         return this@Expr
     }
 
