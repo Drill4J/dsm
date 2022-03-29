@@ -16,6 +16,7 @@
 package com.epam.dsm.find
 
 import com.epam.dsm.*
+import com.epam.dsm.Column
 import com.epam.dsm.serializer.*
 import com.epam.dsm.util.*
 import kotlinx.serialization.json.*
@@ -23,6 +24,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
 import java.sql.*
 import kotlin.reflect.*
+import kotlin.reflect.full.*
 
 class SearchQuery<T>(
     val expression: String,
@@ -48,15 +50,17 @@ inline fun <reified T> deserializeByDsm(): (ResultSet, ClassLoader) -> T = { rs,
  * It is for inner need. Use another methods
  */
 suspend inline fun <reified T : Any, reified R : Any> SearchQuery<T>.execute(
-    selectSql: String = JSON_COLUMN,
+    selectSql: String = fullJson<T>(),
     crossinline handleResult: (ResultSet, ClassLoader) -> R,
 ): List<R> = newSuspendedTransaction(db = db) {
     val tableName = createTableIfNotExists<T>(connection.schema)
     val resultList = mutableListOf<R>()
-    execWrapper("""
+    execWrapper(
+        """
             |SELECT ${transformReturn(selectSql)} FROM $tableName
             |WHERE $expression
-        """.trimMargin()) { rs ->
+        """.trimMargin()
+    ) { rs ->
         while (rs.next()) {
             resultList.add(handleResult(rs, classLoader))
         }
@@ -81,7 +85,8 @@ suspend inline fun <reified T : Any> SearchQuery<T>.getIds(): List<String> =
  * @return List<R>, R - field which map
  */
 suspend inline fun <reified T : Any, reified R : Any> SearchQuery<T>.getAndMap(field: KProperty1<T, R>): List<R> = run {
-    execute(FieldPath(field).extractJson(), deserializeByDsm())
+    val path = field.takeIf { it.hasAnnotation<Column>() }?.let { ColumnPath(it) } ?: FieldPath(field)
+    execute(path.extractJson(), deserializeByDsm())
 }
 
 /**
@@ -89,17 +94,23 @@ suspend inline fun <reified T : Any, reified R : Any> SearchQuery<T>.getAndMap(f
  * todo remove if it will be not need in test2code
  */
 suspend inline fun <reified T : Any, reified R : Any> SearchQuery<T>.getAndMap(field: String): List<R> = run {
-    execute(FieldPath(field).extractJson(), deserializeByDsm())
+    val path = T::class.memberProperties.find { it.name == field }?.takeIf { it.hasAnnotation<Column>() }?.let {
+        ColumnPath(it)
+    } ?: FieldPath(field)
+    execute(path.extractJson(), deserializeByDsm())
 }
 
 /**
  * @return List<String> - cast any type to String
  */
 suspend inline fun <reified T : Any> SearchQuery<T>.getStrings(field: String): List<String> = run {
-    getStrings(FieldPath(field))
+    val path = T::class.memberProperties.find { it.name == field }?.takeIf { it.hasAnnotation<Column>() }?.let {
+        ColumnPath(it)
+    } ?: FieldPath(field)
+    getStrings(path)
 }
 
-suspend inline fun <reified T : Any> SearchQuery<T>.getStrings(field: FieldPath): List<String> = run {
+suspend inline fun <reified T : Any> SearchQuery<T>.getStrings(field: Path): List<String> = run {
     execute(field.extractText()) { rs, _ -> rs.getString(1) as String }
 }
 

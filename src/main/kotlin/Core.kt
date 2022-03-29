@@ -23,6 +23,7 @@ import com.epam.dsm.util.*
 import com.zaxxer.hikari.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.*
+import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.sql.*
@@ -126,7 +127,7 @@ suspend inline fun <reified T : Any> Transaction.getAll(): MutableList<T> {
     val finalData = mutableListOf<T>()
     val tableName = createTableIfNotExists<T>(connection.schema)
     val classLoader = T::class.java.classLoader
-    execWrapper("select $JSON_COLUMN FROM $tableName") { rs ->
+    execWrapper("select ${fullJson<T>()} FROM $tableName") { rs ->
         while (rs.next()) {
             finalData.add(dsmDecode(rs.getBinaryStream(1), classLoader))
         }
@@ -143,7 +144,7 @@ suspend inline fun <reified T : Any> Transaction.findById(
 ): T? = run {
     var entity: T? = null
     val tableName = createTableIfNotExists<T>(connection.schema)
-    execWrapper("select $JSON_COLUMN FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") { rs ->
+    execWrapper("select ${fullJson<T>()} FROM $tableName WHERE $ID_COLUMN='${id.hashCode()}'") { rs ->
         if (rs.next()) {
             entity = dsmDecode(rs.getBinaryStream(1))
         }
@@ -260,8 +261,9 @@ fun EntryClass<*, *>.tableName(
 suspend inline fun <reified T : Any> createTableIfNotExists(
     schema: String,
     tableName: String = T::class.tableName(),
+    descriptor: SerialDescriptor? = T::class.serializerOrNull()?.descriptor,
     crossinline createTable: Transaction.(String) -> Unit = { table ->
-        createJsonTable<T>(table)
+        createJsonTable<T>(table, descriptor)
     },
 ): String {
     val tableKey = "$schema.$tableName"

@@ -18,6 +18,8 @@
 package com.epam.dsm.util
 
 import com.epam.dsm.*
+import com.epam.dsm.Column
+import com.epam.dsm.find.*
 import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
 import mu.*
@@ -36,19 +38,29 @@ val logger = KotlinLogging.logger {}
 internal val uuid
     get() = "${UUID.randomUUID()}"
 
-inline fun <reified T : Any> Transaction.createJsonTable(tableName: String) {
-    execWrapper("""
+inline fun <reified T : Any> Transaction.createJsonTable(
+    tableName: String,
+    descriptor: SerialDescriptor?
+) {
+    val columns = descriptor?.findColumnAnnotation() ?: emptyMap()
+    execWrapper(
+        """
         CREATE TABLE IF NOT EXISTS $tableName (
             $ID_COLUMN varchar(256) not null constraint ${tableName}_pk primary key,
             $PARENT_ID_COLUMN varchar(256), 
-            $JSON_COLUMN jsonb
+            $JSON_COLUMN jsonb${columns.keys.tableColumns()}
         );
         ${cascadeDeleteCollectionTrigger<T>(tableName, "update", "NEW")}
         ${cascadeDeleteCollectionTrigger<T>(tableName, "delete", "OLD")}
+        ${insertTrigger(tableName, columns)}
    """
     )
     commit()
 }
+
+fun Set<Column>.tableColumns() = takeIf { it.isNotEmpty() }?.joinToString(prefix = ", ") {
+    "${it.name} ${it.type.value}"
+} ?: ""
 
 fun Transaction.createBinaryTable() {
     execWrapper(
@@ -135,6 +147,33 @@ fun String.createTrigger(
     """.trimIndent()
 }
 
+/**
+ * Trigger on insert. The trigger fills a separate column (if there is a [Column] annotation)
+ * from json_body, while the annotated [Column] fields are taken away from json_body itself.
+ */
+fun insertTrigger(tableName: String, columns: Map<Column, List<String>>): String = run {
+    "".takeIf { columns.isEmpty() } ?: """  
+       CREATE or REPLACE FUNCTION insert_trigger_for_$tableName()
+       RETURNS TRIGGER
+       AS $$
+       BEGIN
+            ${columns.fillColumn()}
+            NEW.json_body = NEW.json_body${columns.minus()};
+       RETURN NEW;
+       END;
+       $$
+       LANGUAGE plpgsql;
+        
+       DROP TRIGGER IF EXISTS insert_trigger_for_$tableName on $tableName;
+       
+       CREATE TRIGGER insert_trigger_for_$tableName
+       BEFORE INSERT ON $tableName
+       FOR EACH ROW EXECUTE PROCEDURE insert_trigger_for_$tableName();
+    """.trimIndent()
+}
+
+private fun Map<Column, List<String>>.minus() = values.joinToString() { "#-'{${it.joinToString()}}'" }
+
 
 fun SerialDescriptor.collectionPaths(path: String = ""): List<PathToTable> {
     val pathCollection = mutableListOf<PathToTable>()
@@ -166,3 +205,22 @@ fun SerialDescriptor.collectionPaths(path: String = ""): List<PathToTable> {
 fun List<PathToTable>.toQuery() = fold("") { acc, (path, table) ->
     acc + "DELETE FROM $table WHERE $ID_COLUMN IN (SELECT * FROM json_array_elements_text((OLD.json_body$path)::json)); \n"
 }
+
+fun Map<Column, List<String>>.fillColumn() = entries.fold("") { acc, (annotation, path) ->
+    acc + "NEW.${annotation.name} = CAST(NEW.json_body${path.toSqlPath()} as ${annotation.type.value}); \n"
+}
+
+fun List<String>.toSqlPath(
+    initial: String = "",
+    lastOperation: String = EXTRACT_TEXT
+) = foldIndexed(initial) { index, acc, next ->
+    if (index != size - 1) "$acc $EXTRACT_JSON ${next.toQuotes()}" else "$acc $lastOperation ${next.toQuotes()}"
+}
+
+fun SerialDescriptor.buildJson() = findColumnAnnotation().entries.fold(JSON_COLUMN) { acc, (annotation, path) ->
+    """jsonb_set($acc, '{${path.joinToString()}}'::text[], to_jsonb(${annotation.name}), true)""".trimIndent()
+}
+
+inline fun <reified T : Any> fullJson(
+    descriptor: SerialDescriptor? = T::class.serializerOrNull()?.descriptor
+) = descriptor?.buildJson() ?: JSON_COLUMN

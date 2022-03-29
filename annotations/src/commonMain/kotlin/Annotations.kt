@@ -23,3 +23,11 @@ annotation class Id
 
 @Target(AnnotationTarget.CLASS)
 annotation class StreamSerialization
+
+@SerialInfo
+@Target(AnnotationTarget.PROPERTY, AnnotationTarget.FIELD)
+annotation class Column(val name: String, val type: PostgresType)
+
+enum class PostgresType(val value: String) {
+    JSONB("JSONB"), BIT_VARYING("BIT VARYING")
+}
