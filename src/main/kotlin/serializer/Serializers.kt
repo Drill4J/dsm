@@ -179,6 +179,9 @@ class DsmSerializer<T>(
                 deserializer: DeserializationStrategy<T>,
                 previousValue: T?,
             ): T {
+                val registeredPoolSerializers = registeredPoolSerializers.takeIf {
+                    descriptor.annotatedWithPool(index)
+                }
                 return when (deserializer) {
                     ByteArraySerializer() -> {
                         compositeDecoder.decodeSerializableElement(descriptor, index, deserializer)
@@ -191,7 +194,7 @@ class DsmSerializer<T>(
 
                             val clazz = classLoader.run { getClass(keyDescriptor) to getClass(valueDescriptor) }
                             val entrySerializer = deserializer.run {
-                                keySerializer to valueSerializer
+                                keySerializer to registeredPoolSerializers.getOrPutIfNotNull(valueSerializer.descriptor.serialName) { valueSerializer }
                             } as EntrySerializer<Any, Any>
                             val map = loadMap(id, clazz, entrySerializer)
                             unchecked(map)
@@ -215,14 +218,18 @@ class DsmSerializer<T>(
                             unchecked(getBinaryCollection(id).parseCollection(deserializer))
                         } else {
                             val elementClass = classLoader.getClass(elementDescriptor)
-                            val kSerializer = elementClass.dsmSerializer(classLoader)
+                            val kSerializer = elementClass.dsmSerializer(classLoader).let {
+                                registeredPoolSerializers.getOrPutIfNotNull(it.descriptor.serialName) { it }
+                            } as KSerializer<Any>
                             val list = loadCollection(id, elementClass, kSerializer)
                             unchecked(list.parseCollection(deserializer))
                         }
                     }
                     else -> {
-                        val strategy = DsmSerializer(deserializer as KSerializer<T>, classLoader)
-                        compositeDecoder.decodeSerializableElement(descriptor, index, strategy)
+                        val strategy = registeredPoolSerializers.getOrPutIfNotNull(deserializer.descriptor.serialName) {
+                            DsmSerializer(deserializer as KSerializer<T>, classLoader)
+                        }
+                        compositeDecoder.decodeSerializableElement(descriptor, index, strategy) as T
                     }
                 }
             }

@@ -23,3 +23,7 @@ annotation class Id
 
 @Target(AnnotationTarget.CLASS)
 annotation class StreamSerialization
+
+@SerialInfo
+@Target(AnnotationTarget.PROPERTY, AnnotationTarget.FIELD)
+annotation class DeserializeWithPool

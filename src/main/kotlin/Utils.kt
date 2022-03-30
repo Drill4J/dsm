@@ -20,7 +20,6 @@ package com.epam.dsm
 import com.epam.dsm.serializer.*
 import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
-import kotlinx.serialization.internal.*
 import kotlinx.serialization.json.*
 import java.io.*
 import java.util.*
@@ -32,14 +31,14 @@ val json = Json {
 }
 
 inline fun <reified T : Any> T.id(): Int {
-    val idName = idName(T::class.serializer().descriptor)
+    val idName = T::class.serializer().descriptor.findAnnotation<Id>()
     val propertyWithId = T::class.memberProperties.find { it.name == idName }
     return propertyWithId?.getter?.invoke(this)?.hashCode() ?: throw RuntimeException("Property with @Id doesn't found")
 }
 
-fun idName(desc: SerialDescriptor): String? = (0 until desc.elementsCount).firstOrNull { index ->
-    desc.getElementAnnotations(index).any { it is Id }
-}?.let { idIndex -> desc.getElementName(idIndex) }
+inline fun <reified A : Annotation> SerialDescriptor.findAnnotation(): String? = (0 until elementsCount).firstOrNull { index ->
+    getElementAnnotations(index).any { it is A }
+}?.let { idIndex -> getElementName(idIndex) }
 
 fun Any.encodeId(): String = when (this) {
     is String -> this
