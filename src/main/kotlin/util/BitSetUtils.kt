@@ -16,8 +16,7 @@
 package com.epam.dsm.util
 
 import java.util.*
-import java.util.stream.IntStream
-
+import java.util.stream.*
 
 fun BitSet.stringRepresentation(): String {
     val size = length() - 1 //bitset issue.

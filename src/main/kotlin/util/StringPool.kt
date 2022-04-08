@@ -21,7 +21,6 @@ import java.util.*
 
 val initialPoolCapacity = (System.getenv("DRILL_INITIAL_POOL_SIZE")?.toInt() ?: 1_000_000)
 
-
 internal val weakRefStringPool = WeakHashMap<String, WeakReference<String>>(initialPoolCapacity)
 
 fun String.weakIntern(): String {

@@ -338,6 +338,18 @@ class DsmCoreTest : PostgresBased("plugin") {
         assertEquals(expected, storeClient.findById("id2"))
     }
 
+    @Test
+    fun `should delete by part of composite id`() = runBlocking {
+        val id = CompositeId("one", 1)
+        val data = CompositeData(id, "data")
+        storeClient.store(data)
+        storeClient.deleteBy<CompositeData> {
+            FieldPath(CompositeData::id, CompositeId::str) eq id.str
+        }
+        assertNull(storeClient.findById<CompositeData>(id))
+    }
+
+
 }
 
 @Serializable
