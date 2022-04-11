@@ -48,44 +48,27 @@ fun <T : Any?, R : Any?> storeMap(
         }
     }
     if (map.none()) return@transaction ids
-    val file = File.createTempFile("prefix-", "-postfix") // TODO EPMDJ-9370 Remove file creating
-    val sizes = mutableListOf<EntrySize>()
-    try {
-        file.outputStream().use {
-            map.forEach { (key, value) ->
-                if (key != null && value != null) {
-                    val sizeBefore = it.size()
-                    json.encodeToStream(serializer.first, key, it)
-                    val keySize = (it.size() - sizeBefore).toInt()
-                    json.encodeToStream(serializer.second, value, it)
-                    val valueSize = (it.size() - keySize - sizeBefore).toInt()
-                    sizes.add(keySize to valueSize)
-                }
-            }
-            sizes
-        }
-        val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, KEY_JSON, VALUE_JSON) VALUES (?, ?, CAST(? as jsonb), CAST(? as jsonb))
+    val stmt = """
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, KEY_JSON, VALUE_JSON) VALUES (?, '$parentId', CAST(? as jsonb), CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET KEY_JSON = excluded.KEY_JSON, VALUE_JSON = excluded.VALUE_JSON
         """.trimMargin()
-        val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
-        file.inputStream().reader().use {
-            sizes.forEachIndexed { index, (keySize, valueSize) ->
-                statement.setString(1, uuid.also { ids.add(it) })
-                statement.setString(2, parentId)
-                statement.setCharacterStream(3, it, keySize)
-                statement.setCharacterStream(4, it, valueSize)
-                statement.addBatch()
-                if (index % DSM_PUSH_LIMIT == 0) {
-                    statement.executeBatch()
-                    statement.clearBatch()
-                }
-            }
-            statement.executeBatch()
+    val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
+    map.entries.forEachIndexed { index, (key, value) ->
+        val pipedOutputStream = PipedOutputStream()
+        val pipedInputStream = PipedInputStream(pipedOutputStream)
+        json.encodeToPipedStream(serializer.second, value as Any, pipedOutputStream)
+        statement.setString(1, uuid.also { ids.add(it) })
+        statement.setString(2, json.encodeToString(serializer.first, key as Any))
+        pipedInputStream.reader().use {
+            statement.setCharacterStream(3, it)
         }
-    } finally {
-        file.delete()
+        statement.addBatch()
+        if (index % DSM_PUSH_LIMIT == 0) {
+            statement.executeBatch()
+            statement.clearBatch()
+        }
     }
+    statement.executeBatch()
     ids
 }
 

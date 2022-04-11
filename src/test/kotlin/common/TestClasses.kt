@@ -201,8 +201,8 @@ data class ObjectWithTwoAnnotation(
 data class LargeObject(
     @Id
     val id: String,
-    val list: List<String>,
-    val map: Map<String, String>,
+    val list: List<Data>,
+    val map: Map<String, Data>,
 )
 
 @StreamSerialization
@@ -210,6 +210,6 @@ data class LargeObject(
 data class LargeObjectWithStreamSerializationAnnotation(
     @Id
     val id: String,
-    val list: List<String>,
-    val map: Map<String, String>,
+    val list: List<Data>,
+    val map: Map<String, Data>,
 )

@@ -18,14 +18,20 @@
 package com.epam.dsm.util
 
 import com.epam.dsm.*
+import kotlinx.coroutines.*
 import com.epam.dsm.Column
 import com.epam.dsm.find.*
 import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.json.*
 import mu.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.*
+import java.io.*
 import java.sql.*
 import java.util.*
+import java.util.concurrent.*
+import kotlin.coroutines.*
 import kotlin.reflect.*
 
 typealias PathToTable = Pair<String, String>
@@ -37,6 +43,33 @@ val logger = KotlinLogging.logger {}
 
 internal val uuid
     get() = "${UUID.randomUUID()}"
+
+/***
+ * Dispatcher for writing in [PipedOutputStream]
+ * Writing and reading should be done in different threads, as thread deadlock may occur.
+ *
+ * Using [TransactionManager], the transaction is transferred through the coroutine context.
+ */
+internal object TransactionAsyncDispatcher : CoroutineScope {
+    private val threadPoolExecutor = Executors.newFixedThreadPool(5).asCoroutineDispatcher() + SupervisorJob()
+    override val coroutineContext
+        get() = threadPoolExecutor + currentTransactionContext()
+
+    private fun currentTransactionContext(): CoroutineContext {
+        val manager = TransactionManager.manager as? ThreadLocalTransactionManager
+        return manager?.currentOrNull()?.let {
+            manager.threadLocal.asContextElement(it)
+        } ?: EmptyCoroutineContext
+    }
+}
+
+fun <T: Any> Json.encodeToPipedStream(
+    serializer: KSerializer<T>,
+    value: T,
+    pipedOutputStream: PipedOutputStream
+) = TransactionAsyncDispatcher.launch {
+    pipedOutputStream.use { encodeToStream(serializer, value, it) }
+}
 
 inline fun <reified T : Any> Transaction.createJsonTable(
     tableName: String,
