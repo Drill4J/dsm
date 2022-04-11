@@ -183,6 +183,31 @@ class ExpressionTest : PostgresBased("expression") {
     }
 
     @Test
+    fun `should find when property can be null`() = runBlocking {
+        storeClient.store(complexObject.copy(id = "123", enumExample = FIRST))
+        val findBy = storeClient.findBy<ComplexObject> {
+            (ComplexObject::ch eq "x")
+        }
+        val result = findBy.getAndMap(ComplexObject::enumExample)
+        assertEquals(1, result.size)
+    }
+
+    @Test
+    fun `should find when use equals with case insensitive`() = runBlocking {
+        storeClient.store(complexObject.copy(id = "case", ch = 't'))
+        val findBy = storeClient.findBy<ComplexObject> {
+            FieldPath(ComplexObject::ch) eqIgnoreCase "T"
+        }
+        assertEquals(1, findBy.get().size)
+        assertEquals(1,
+            storeClient.findBy<ComplexObject> {
+                (ComplexObject::id eqIgnoreCase "CASE")
+            }.get().size
+        )
+
+    }
+
+    @Test
     fun `should find nothing when list table does not create yet`() = runBlocking {
         val findBy = storeClient.findBy<SetPayload> {
             containsParentId(listOf("23"))
@@ -201,7 +226,6 @@ class ExpressionTest : PostgresBased("expression") {
         assertEquals(1, findBy.getAndMap(SetPayload::id).size)
 
     }
-
 
 
 }

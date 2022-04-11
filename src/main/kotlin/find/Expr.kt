@@ -47,7 +47,7 @@ class FieldPath : Path {
  * ColumnPath is using to search for a path starting the separate column name
  */
 class ColumnPath(
-    vararg properties: KProperty1<*, *>
+    vararg properties: KProperty1<*, *>,
 ) : Path(properties.map { it.findAnnotation<Column>()?.name ?: it.name }) {
 
     /**
@@ -83,6 +83,7 @@ class Expr<Q : Any> {
 
     companion object {
         const val SHIFT_OPERATION = 1
+        const val SQL_LOWER_CASE = "lower"
     }
 
     infix fun Expr<Q>.and(@Suppress("UNUSED_PARAMETER") expression: Expr<Q>): Expr<Q> {
@@ -95,12 +96,23 @@ class Expr<Q : Any> {
         return this
     }
 
-    infix fun <R : Comparable<*>> KProperty1<Q, R>.eq(r: R): Expr<Q> {
-        val encodeId = r.encodeId()
+    infix fun <R : Any?> KProperty1<Q, R>.eq(another: R): Expr<Q> {
+        val encodeId = another.encodeId()
         conditions.add(
             """
             ${columnOrJsonBody(if (encodeId.startsWith("{")) "$JSON_COLUMN->" else "$JSON_COLUMN->>")}
             ${equal(encodeId)}
+            """.trimIndent()
+        )
+        return this@Expr
+    }
+
+    infix fun <R : Any?> KProperty1<Q, R>.eqIgnoreCase(another: R): Expr<Q> {
+        val encodeId = another.encodeId()
+        conditions.add(
+            """
+            $SQL_LOWER_CASE(${columnOrJsonBody(if (encodeId.startsWith("{")) "$JSON_COLUMN->" else "$JSON_COLUMN->>")})
+            ${equal(encodeId, true)}
             """.trimIndent()
         )
         return this@Expr
@@ -111,32 +123,40 @@ class Expr<Q : Any> {
         return this@Expr
     }
 
-    private fun equal(value: String) = "= ${value.toQuotes()}"
+    infix fun Path.eqIgnoreCase(value: String): Expr<Q> {
+        conditions.add("$SQL_LOWER_CASE(${extractText()})${equal(value, ignoreCase = true)}")
+        return this@Expr
+    }
+
+    private fun equal(
+        value: String,
+        ignoreCase: Boolean = false,
+    ): String = if (!ignoreCase) "= ${value.toQuotes()}" else "= $SQL_LOWER_CASE(${value.toQuotes()})"
 
     fun Path.eqNull(): Expr<Q> {
         conditions.add("${extractText()}${this@Expr.eqNull()}")
         return this@Expr
     }
 
-    fun <R : Comparable<*>> KProperty1<Q, R>.eqNull(): Expr<Q> {
+    fun <R : Any?> KProperty1<Q, R>.eqNull(): Expr<Q> {
         conditions.add("${columnOrJsonBody()}${this@Expr.eqNull()}")
         return this@Expr
     }
 
     private fun eqNull() = " is null"
 
-    infix fun <R : Comparable<*>> KProperty1<Q, R>.startsWith(prefix: String): Expr<Q> {
+    infix fun <R : Any?> KProperty1<Q, R>.startsWith(prefix: String): Expr<Q> {
         conditions.add("${columnOrJsonBody()} like '$prefix%'")
         return this@Expr
     }
 
-    infix fun <R : Comparable<*>> KProperty1<Q, R>.contains(values: List<String>): Expr<Q> {
+    infix fun <R : Any?> KProperty1<Q, R>.contains(values: List<String>): Expr<Q> {
         conditions.add("${columnOrJsonBody()}${values.toSqlIn()}")
         return this@Expr
     }
 
-    private fun <R : Comparable<*>> KProperty1<Q, R>.columnOrJsonBody(
-        startPath: String = "$JSON_COLUMN->>"
+    private fun <R : Any?> KProperty1<Q, R>.columnOrJsonBody(
+        startPath: String = "$JSON_COLUMN->>",
     ) = findAnnotation<Column>()?.name ?: "$startPath${this.name.toQuotes()}"
 
     infix fun Path.containsWithNull(values: List<String>): Expr<Q> {

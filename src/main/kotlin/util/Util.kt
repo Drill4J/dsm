@@ -56,7 +56,7 @@ inline fun <reified A : Annotation> SerialDescriptor.findAnnotation(): String? =
 
 fun SerialDescriptor.findColumnAnnotation(
     path: List<String> = emptyList(),
-    result: MutableMap<Column, List<String>> = mutableMapOf()
+    result: MutableMap<Column, List<String>> = mutableMapOf(),
 ): Map<Column, List<String>> = (0 until elementsCount).forEach { index ->
     val innerDescriptor = getElementDescriptor(index)
     val element = getElementName(index)
@@ -68,11 +68,13 @@ fun SerialDescriptor.findColumnAnnotation(
     } else return@forEach
 }.run { result }
 
-fun Any.encodeId(): String = when (this) {
-    is String -> this
-    is Enum<*> -> toString()
-    else -> json.encodeToString(unchecked(this::class.serializer()), this)
-}
+fun Any?.encodeId(): String = this?.run {
+    when (this) {
+        is String -> this
+        is Enum<*> -> toString()
+        else -> json.encodeToString(unchecked(this::class.serializer()), this)
+    }
+} ?: throw RuntimeException("Can not encode null value")
 
 inline fun <reified T : Any> KClass<T>.dsmSerializer(
     parentId: String? = null,
