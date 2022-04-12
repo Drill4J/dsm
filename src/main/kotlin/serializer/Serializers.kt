@@ -119,7 +119,7 @@ class DsmSerializer<T>(
                             val entrySerializer = mapLikeSerializer.run {
                                 keySerializer to valueSerializer
                             } as EntrySerializer<Any, Any>
-                            val ids = storeMap(value, parentId, clazz, entrySerializer)
+                            val ids = storeMap(value, parentId, clazz, entrySerializer, classLoader)
                             compositeEncoder.encodeSerializableElement(
                                 descriptor,
                                 index,
@@ -195,7 +195,7 @@ class DsmSerializer<T>(
                             val entrySerializer = deserializer.run {
                                 keySerializer to registeredPoolSerializers.getOrPutIfNotNull(valueSerializer.descriptor.serialName) { valueSerializer }
                             } as EntrySerializer<Any, Any>
-                            val map = loadMap(ids, clazz, entrySerializer)
+                            val map = loadMap(ids, clazz, entrySerializer, classLoader)
                             unchecked(map)
                         } else compositeDecoder.decodeSerializableElement(
                             descriptor,
@@ -255,14 +255,11 @@ private fun Iterable<Any>.parseCollection(
 inline fun <reified T : Any> dsmDecode(
     inputStream: InputStream,
     classLoader: ClassLoader = T::class.java.classLoader!!,
-): T = json.decodeFromStream(
-    T::class.dsmSerializer(classLoader = classLoader),
-    inputStream
-)
+): T = json.decodeFromStream(T::class.dsmSerializer(classLoader = classLoader), inputStream)
 
 inline fun <reified T : Any> dsmDecode(
     inputJson: String,
-    classLoader: ClassLoader,
+    classLoader: ClassLoader = T::class.java.classLoader!!,
 ): T = json.decodeFromString(T::class.dsmSerializer(classLoader = classLoader), inputJson)
 
 inline fun <reified T : Any> classLoader(): ClassLoader = T::class.java.classLoader!!

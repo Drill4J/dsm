@@ -83,10 +83,10 @@ inline fun <reified T : Any> loadCollection(
     elementSerializer: KSerializer<T>,
 ): Iterable<T> = transaction {
     val entities: MutableList<T> = mutableListOf()
-    if (ids.isEmpty()) return@transaction entities
     val tableName = runBlocking {
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName())
     }
+    if (ids.isEmpty()) return@transaction entities
     val idString = ids.joinToString { "'$it'" }
     val stm = "select ${fullJson<Any>(elementSerializer.descriptor)} FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)

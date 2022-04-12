@@ -38,6 +38,8 @@ import kotlin.time.*
 const val JSON_COLUMN = "JSON_BODY"
 const val ID_COLUMN = "ID"
 const val PARENT_ID_COLUMN = "PARENT_ID"
+const val KEY_JSON = "KEY_JSON"
+const val VALUE_JSON = "VALUE_JSON"
 
 /**
  * Can be init by:

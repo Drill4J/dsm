@@ -40,6 +40,7 @@ fun <T : Any?, R : Any?> storeMap(
     parentId: String?,
     entryClass: EntryClass<*, *>,
     serializer: EntrySerializer<Any, Any>,
+    classLoader: ClassLoader,
 ): List<String> = transaction {
     val ids = mutableListOf<String>()
     val tableName = runBlocking {
@@ -57,7 +58,7 @@ fun <T : Any?, R : Any?> storeMap(
                     val sizeBefore = it.size()
                     json.encodeToStream(serializer.first, key, it)
                     val keySize = (it.size() - sizeBefore).toInt()
-                    json.encodeToStream(serializer.second, value, it)
+                    json.encodeToStream(DsmSerializer(serializer.second, classLoader, parentId), value, it)
                     val valueSize = (it.size() - keySize - sizeBefore).toInt()
                     sizes.add(keySize to valueSize)
                 }
@@ -65,8 +66,8 @@ fun <T : Any?, R : Any?> storeMap(
             sizes
         }
         val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, KEY_JSON, VALUE_JSON) VALUES (?, ?, CAST(? as jsonb), CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET KEY_JSON = excluded.KEY_JSON, VALUE_JSON = excluded.VALUE_JSON
+            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, $KEY_JSON, $VALUE_JSON) VALUES (?, ?, CAST(? as jsonb), CAST(? as jsonb))
+            |ON CONFLICT (id) DO UPDATE SET $KEY_JSON = excluded.$KEY_JSON, $VALUE_JSON = excluded.$VALUE_JSON
         """.trimMargin()
         val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
         file.inputStream().reader().use {
@@ -96,6 +97,7 @@ inline fun <reified T : Any, reified R : Any> loadMap(
     ids: List<String>,
     clazz: EntryClass<T, R>,
     serializer: EntrySerializer<T, R>,
+    classLoader: ClassLoader,
 ): Map<T, R> = transaction {
     val entities: MutableMap<T, R> = mutableMapOf()
     val tableName = clazz.tableName()
@@ -106,13 +108,13 @@ inline fun <reified T : Any, reified R : Any> loadMap(
     }
     if (ids.isEmpty()) return@transaction entities
     val idString = ids.joinToString { "'$it'" }
-    val stm = "select KEY_JSON, VALUE_JSON FROM $tableName WHERE $ID_COLUMN in ($idString)"
+    val stm = "select $KEY_JSON, $VALUE_JSON FROM $tableName WHERE $ID_COLUMN in ($idString)"
     val statement = (connection.connection as HikariProxyConnection).prepareStatement(stm)
     statement.fetchSize = DSM_FETCH_LIMIT
     statement.executeQuery().let { rs ->
         while (rs.next()) {
             val key = json.decodeFromStream(serializer.first, rs.getBinaryStream(1))
-            val value = json.decodeFromStream(serializer.second, rs.getBinaryStream(2))
+            val value = json.decodeFromStream(DsmSerializer(serializer.second, classLoader), rs.getBinaryStream(2))
             entities[key] = value
         }
     }

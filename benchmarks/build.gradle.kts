@@ -62,11 +62,10 @@ allOpen {
     annotation("org.openjdk.jmh.annotations.State")
 }
 
-
 tasks {
     test {
         useJUnitPlatform()
-        systemProperty("plugin.feature.drealtime", false)
+        maxHeapSize = "2g"
     }
 }
 benchmark {
