@@ -84,6 +84,7 @@ class Expr<Q : Any> {
     companion object {
         const val SHIFT_OPERATION = 1
         const val SQL_LOWER_CASE = "lower"
+        const val ANY = "%"
     }
 
     infix fun Expr<Q>.and(@Suppress("UNUSED_PARAMETER") expression: Expr<Q>): Expr<Q> {
@@ -146,7 +147,12 @@ class Expr<Q : Any> {
     private fun eqNull() = " is null"
 
     infix fun <R : Any?> KProperty1<Q, R>.startsWith(prefix: String): Expr<Q> {
-        conditions.add("${columnOrJsonBody()} like '$prefix%'")
+        conditions.add("${columnOrJsonBody()} like '$prefix$ANY'")
+        return this@Expr
+    }
+
+    infix fun <R : Any?> KProperty1<Q, R>.like(expr: String): Expr<Q> {
+        conditions.add("${columnOrJsonBody()} like '$expr'")
         return this@Expr
     }
 
