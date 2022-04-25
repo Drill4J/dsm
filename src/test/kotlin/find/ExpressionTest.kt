@@ -21,6 +21,7 @@ import com.epam.dsm.*
 import com.epam.dsm.EnumExample.*
 import com.epam.dsm.common.*
 import com.epam.dsm.common.PrepareData.Companion.storeLists
+import com.epam.dsm.find.Expr.Companion.ANY
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import kotlin.test.*
@@ -39,6 +40,15 @@ class ExpressionTest : PostgresBased("expression") {
         storeClient.store(simpleObject)
         storeClient.deleteBy<SimpleObject> {
             SimpleObject::id startsWith "i"
+        }
+        assertTrue(storeClient.getAll<SimpleObject>().isEmpty())
+    }
+
+    @Test
+    fun `should delete object with like expression`() = runBlocking {
+        storeClient.store(simpleObject)
+        storeClient.deleteBy<SimpleObject> {
+            SimpleObject::string like "sub${ANY}tr"
         }
         assertTrue(storeClient.getAll<SimpleObject>().isEmpty())
     }
