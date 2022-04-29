@@ -40,37 +40,26 @@ fun <T : Any?> storeCollection(
         createTableIfNotExists<Any>(connection.schema, elementClass.tableName(), elementSerializer.descriptor)
     }
     if (collection.none()) return@transaction ids
-    val file = File.createTempFile("prefix-", "-postfix")
-    try {
-        val sizes = mutableListOf<Int>()
-        file.outputStream().use { outputStream ->
-            collection.filterNotNull().forEach { value ->
-                val sizeBefore = outputStream.size()
-                json.encodeToStream(elementSerializer, value, outputStream)
-                sizes.add((outputStream.size() - sizeBefore).toInt())
-            }
+    val stmt = """
+        |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (?, '$parentId', CAST(? as jsonb))
+        |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
+    """.trimMargin()
+    val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
+    collection.forEachIndexed { index, value ->
+        val pipedOutputStream = PipedOutputStream()
+        val pipedInputStream = PipedInputStream(pipedOutputStream)
+        json.encodeToPipedStream(elementSerializer, value as Any, pipedOutputStream)
+        statement.setString(1, uuid.also { ids.add(it) })
+        pipedInputStream.reader().use {
+            statement.setCharacterStream(2, it)
         }
-        val stmt = """
-            |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $PARENT_ID_COLUMN, $JSON_COLUMN) VALUES (?, ?, CAST(? as jsonb))
-            |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
-        """.trimMargin()
-        val statement = (connection.connection as HikariProxyConnection).prepareStatement(stmt)
-        file.inputStream().reader().use {
-            sizes.forEachIndexed { index, size ->
-                statement.setString(1, uuid.also { ids.add(it) })
-                statement.setString(2, parentId)
-                statement.setCharacterStream(3, it, size)
-                statement.addBatch()
-                if (index % DSM_PUSH_LIMIT == 0) {
-                    statement.executeBatch()
-                    statement.clearBatch()
-                }
-            }
+        statement.addBatch()
+        if (index % DSM_PUSH_LIMIT == 0) {
             statement.executeBatch()
+            statement.clearBatch()
         }
-    } finally {
-        file.delete()
     }
+    statement.executeBatch()
     ids
 }
 

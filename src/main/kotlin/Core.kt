@@ -217,23 +217,18 @@ inline fun <reified T : Any> Transaction.storeAsStream(
     tableName: String,
 ) {
     val id = any.id()
-    val file = File.createTempFile("prefix-", "-suffix") // TODO EPMDJ-9370 Remove file creating
-    try {
-        file.outputStream().use {
-            json.encodeToStream(T::class.dsmSerializer(id), any, it)
-        }
-        val stmt =
-            """
+    val pipedOutputStream = PipedOutputStream()
+    val pipedInputStream = PipedInputStream(pipedOutputStream)
+    json.encodeToPipedStream(T::class.dsmSerializer(id), any, pipedOutputStream)
+    val stmt =
+        """
             |INSERT INTO ${tableName.lowercase(Locale.getDefault())} (ID, $JSON_COLUMN) VALUES ('$id', CAST(? as jsonb))
             |ON CONFLICT (id) DO UPDATE SET $JSON_COLUMN = excluded.$JSON_COLUMN
         """.trimMargin()
-        InputStreamReader(file.inputStream()).use {
-            val prepareStatement = connection.prepareStatement(stmt, false) as JdbcPreparedStatementImpl
-            prepareStatement.statement.setCharacterStream(1, it)
-            prepareStatement.executeUpdate()
-        }
-    } finally {
-        file.delete()
+    pipedInputStream.reader().use {
+        val prepareStatement = connection.prepareStatement(stmt, false) as JdbcPreparedStatementImpl
+        prepareStatement.statement.setCharacterStream(1, it)
+        prepareStatement.executeUpdate()
     }
 }
 
