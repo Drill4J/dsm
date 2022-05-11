@@ -54,15 +54,13 @@ fun <T : Any?, R : Any?> storeMap(
         file.outputStream().use {
             map.forEach { (key, value) ->
                 if (key != null && value != null) {
-                    val sizeBefore = it.size()
-                    json.encodeToStream(serializer.first, key, it)
-                    val keySize = (it.size() - sizeBefore).toInt()
-                    json.encodeToStream(serializer.second, value, it)
-                    val valueSize = (it.size() - keySize - sizeBefore).toInt()
-                    sizes.add(keySize to valueSize)
+                    val keyJson = json.encodeToString(serializer.first, key).intern()
+                    val valueJson = json.encodeToString(serializer.second, value).intern()
+                    sizes.add(keyJson.length to valueJson.length)
+                    it.write(keyJson.toByteArray())
+                    it.write(valueJson.toByteArray())
                 }
             }
-            sizes
         }
         val stmt = """
             |INSERT INTO ${tableName.lowercase(Locale.getDefault())} ($ID_COLUMN, $PARENT_ID_COLUMN, KEY_JSON, VALUE_JSON) VALUES (?, ?, CAST(? as jsonb), CAST(? as jsonb))

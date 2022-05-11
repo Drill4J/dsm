@@ -63,10 +63,23 @@ class StoreCollections : PostgresBased("store_collections") {
         assertEquals(testName, storedObject.data.first().testName)
     }
 
+    @Test
+    fun `should store element of collection with cyrillic symbols`(): Unit = runBlocking {
+        val id = uuid
+        val data = (0..2).map {
+            Data("класс $it", "имя класса $it", "имя теста $it")
+        }
+        val objWithList = ObjectWithList(id, data)
+        assertDoesNotThrow {
+            runBlocking { storeClient.store(objWithList) }
+        }
+        val storedObject = storeClient.findById<ObjectWithList>(id)
+        assertNotNull(storedObject)
+    }
 
     @Test
     fun `should store object with inner lists`(): Unit = runBlocking {
-        val data = (0 until 10).map {
+        val data = (0..10).map {
             Data("classID$it", "className$it", "testName$it")
         }
         val objWithList = ObjectWithList("id", data)
@@ -93,7 +106,7 @@ class StoreCollections : PostgresBased("store_collections") {
     @Test
     fun `should be no conflict - two lists`(): Unit = runBlocking {
         val id = "id"
-        val data = (0 until 100).map {
+        val data = (0..100).map {
             Data("classID$it", "className$it", "testName$it")
         }
         val objectWithList = ObjectWithList(id, data.subList(0, 50), data.subList(50, 100))
@@ -117,7 +130,7 @@ class StoreCollections : PostgresBased("store_collections") {
     fun `should delete by query`(): Unit = runBlocking {
         val id = "id"
         storeClient.store(ObjectWithList(id, listOf(Data("classID", "className", "testName"))))
-        storeClient.deleteBy<ObjectWithList>{
+        storeClient.deleteBy<ObjectWithList> {
             ObjectWithList::id eq id
         }
         assertEquals(emptyList(), storeClient.getAll<ObjectWithList>())
