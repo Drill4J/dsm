@@ -45,9 +45,9 @@ fun <T : Any?> storeCollection(
         val sizes = mutableListOf<Int>()
         file.outputStream().use { outputStream ->
             collection.filterNotNull().forEach { value ->
-                val sizeBefore = outputStream.size()
-                json.encodeToStream(elementSerializer, value, outputStream)
-                sizes.add((outputStream.size() - sizeBefore).toInt())
+                val json = json.encodeToString(elementSerializer, value).intern()
+                outputStream.write(json.toByteArray())
+                sizes.add(json.length)
             }
         }
         val stmt = """

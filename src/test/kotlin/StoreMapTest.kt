@@ -45,6 +45,25 @@ class StoreMapTest : PostgresBased("map") {
     }
 
     @Test
+    fun `should store object with map with cyrillic symbols`(): Unit = runBlocking {
+        val id = "some-id"
+        val data = (1..2).associate { i ->
+            val classId = "класс$i"
+            classId to Data(classId, "имя класса$i", "имя теста $i")
+        }
+        val map = ObjectWithMap(id, data)
+        storeClient.store(map)
+        val stored = storeClient.findById<ObjectWithMap>(id)
+        assertNotNull(stored)
+        assertTrue { stored.data.any() }
+        map.data.forEach { (key, value) ->
+            val actual = stored.data[key]
+            assertNotNull(actual)
+            assertTrue { actual == value }
+        }
+    }
+
+    @Test
     fun `should store map with list values`(): Unit = runBlocking {
         val id = "some-id"
         val data: Map<String, List<Data>> = (1..100).map { i ->
