@@ -203,7 +203,7 @@ inline fun <reified T : Any> Transaction.storeAsString(
         """.trimMargin()
     val stm = connection.prepareStatement(stmt, false)
     stm[1] = json.encodeToString(T::class.dsmSerializer(id), any)
-    logger.debug { "insert: $stmt\nvalue: $any" }
+    logger.trace { "query: $stmt\nvalue: $any" }
     stm.executeUpdate()
 }
 
