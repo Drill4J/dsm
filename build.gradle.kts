@@ -5,6 +5,7 @@ plugins {
     kotlin("plugin.serialization")
     id("com.github.hierynomus.license")
     id("org.jetbrains.kotlin.plugin.noarg")
+    id("io.github.gradle-nexus.publish-plugin") version "1.1.0"
     `maven-publish`
 }
 
@@ -62,6 +63,7 @@ dependencies {
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
+    withSourcesJar()
 }
 
 kotlin {

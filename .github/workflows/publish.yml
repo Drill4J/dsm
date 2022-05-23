@@ -26,7 +26,10 @@ jobs:
           arguments: -s --no-daemon check
       - name: Publish
         run: |
-          gradle -si --no-daemon -Pversion=${GITHUB_REF:11} publish
+          gradle -si --no-daemon -Pversion=${GITHUB_REF:11} publishAllPublicationsToSonatypeRepository closeAndReleaseSonatypeStagingRepository
         env:
-          BINTRAY_USER: ${{ secrets.BINTRAY_USER }}
-          BINTRAY_API_KEY: ${{ secrets.BINTRAY_API_KEY }}
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_TOKEN: ${{ secrets.OSSRH_TOKEN }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
