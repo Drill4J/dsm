@@ -7,7 +7,7 @@ DSM is kotlin serialization-based ORM for Postgres database.
 Where kotlin data classes which marked with @Serializable, can easily be stored or retrieved from Postgres DB without
 describing schemas.
 
-## Example
+## Examples
 
 ### Jsonb table
 
@@ -137,6 +137,19 @@ It will create two tables:
 
    Each item in the Data collection will be in a separate row in the table
 
-# Local
+## Migration
 
-For run tests you need to start Docker 
+For migration process uses FlyWay.
+
+[Tests](src/test/kotlin/MigrationTest.kt) with [sql examples](src/test/resources/db/migration/)
+
+# Development
+## Modules
+
+- **src** - main part
+- **annotations** - there are annotations which can be used for describe data classes.
+- **benchmarks** - tests
+- **test-framework** helps to write tests with DB
+
+## Other
+For run tests is used 'Testcontainers' so you need to start **Docker** 
